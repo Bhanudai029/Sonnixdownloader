@@ -1,0 +1,10 @@
+Flask
+yt-dlp
+requests
+google-api-python-client
+python-dotenv
+Pillow
+gunicorn
+python-socks
+beautifulsoup4
+pysocks
