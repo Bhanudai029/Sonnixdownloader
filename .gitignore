@@ -1,0 +1,34 @@
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# Environment files
+.env
+
+# Downloaded content
+downloads/
+
+# Cookie files
+cookies/
+
+# Log files
+*.log
+*.mp4
+
+# IDE files
+.idea/
+.vscode/
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+
+# Temporary files
+*.tmp 

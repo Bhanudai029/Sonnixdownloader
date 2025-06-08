@@ -182,7 +182,10 @@ def extract_video_id(url):
             video_id = match.group(1)
             break
     
-    return video_id
+    # Also store whether this is a Shorts URL for later use
+    is_shorts = '/shorts/' in url.lower()
+    
+    return video_id, is_shorts
 
 def process_cookie_string(cookies_content_str):
     """
@@ -299,18 +302,18 @@ def index():
 def fetch_info():
     data = request.json
     url = data.get('url')
-    video_id = extract_video_id(url)
+    video_id, is_shorts = extract_video_id(url)
 
     if not video_id:
         return jsonify({'error': 'Invalid YouTube URL'}), 400
 
     temp_ydl_opts_for_info = {
         'quiet': True,
-        'no_warnings': True,
+            'no_warnings': True,
         'simulate': True,
         'extract_flat': True,
         'force_generic_extractor': True,
-        'skip_download': True,
+            'skip_download': True,
     }
 
     if EFFECTIVE_YTDLP_PROXY_URL:
@@ -318,7 +321,7 @@ def fetch_info():
 
     try:
         with yt_dlp.YoutubeDL(temp_ydl_opts_for_info) as ydl:
-            info_dict = ydl.extract_info(url, download=False)
+                    info_dict = ydl.extract_info(url, download=False)
     except Exception as e:
         app.logger.error(f"Error fetching video info with yt-dlp: {str(e)}")
         # Check for common error patterns
@@ -478,7 +481,7 @@ def download_video():
     quality = data.get('quality', 'best')
     cookies_content = data.get('cookies_content')
     user_agent = request.headers.get('User-Agent')
-    video_id = extract_video_id(url)
+    video_id, is_shorts = extract_video_id(url)
     
     if not video_id:
         return jsonify({'error': 'Invalid URL provided'}), 400
@@ -679,6 +682,9 @@ def serve_downloaded_file(filename):
 
 @app.route('/download_thumbnail/<video_id>')
 def download_thumbnail(video_id):
+    # Check if this is a Shorts video using the 'is_shorts' query parameter
+    is_shorts = request.args.get('is_shorts') == 'true'
+    
     thumbnail_url = f"https://i.ytimg.com/vi/{video_id}/maxresdefault.jpg"
     try:
         response = requests.get(thumbnail_url, stream=True)
@@ -691,47 +697,61 @@ def download_thumbnail(video_id):
         img_io.seek(0)
 
         # Open the image using PIL
-        img = Image.open(img_io).convert("RGB") # Ensure RGB for consistency
-
-        # Desired output aspect ratio for Shorts is 9:16
-        original_width, original_height = img.size
-        target_aspect_ratio = 9/16 # This is height / width for a vertical image
-
-        # Calculate dimensions for cropping to a 9:16 aspect ratio
-        # We want to fill the height, and crop the width from the center
-        target_height = 1920 # Aim for a common vertical video resolution
-        target_width = int(target_height * target_aspect_ratio)
-
-        # Calculate the aspect ratios
-        current_aspect_ratio = original_width / original_height
+        img = Image.open(img_io).convert("RGB")  # Ensure RGB for consistency
         
-        if current_aspect_ratio > target_aspect_ratio: # Original is wider than 9:16, need to crop width
-            # Calculate the width needed to match target aspect ratio if height is kept
-            new_width = int(original_height * target_aspect_ratio)
-            left = (original_width - new_width) // 2
-            top = 0
-            right = left + new_width
-            bottom = original_height
-        else: # Original is taller or same aspect ratio as 9:16, need to crop height (less common for YouTube thumbnails)
-            # Calculate the height needed to match target aspect ratio if width is kept
-            new_height = int(original_width / target_aspect_ratio)
-            left = 0
-            top = (original_height - new_height) // 2
-            right = original_width
-            bottom = top + new_height
+        # Create filename based on whether it's a Short or regular video
+        download_name = f"{video_id}_shorts_thumbnail.jpg" if is_shorts else f"{video_id}_thumbnail.jpg"
+        
+        original_width, original_height = img.size
 
-        # Crop the image
-        cropped_img = img.crop((left, top, right, bottom))
-
-        # Resize the cropped image to the target resolution
-        final_img = cropped_img.resize((target_width, target_height), Image.LANCZOS)
+        if is_shorts:
+            # SHORTS PROCESSING: 9:16 vertical aspect ratio
+            target_aspect_ratio = 9/16  # Vertical aspect ratio for Shorts (height/width)
+            
+            # Calculate dimensions for cropping to a 9:16 aspect ratio
+            target_height = 1920  # Aim for a common vertical video resolution
+            target_width = int(target_height * target_aspect_ratio)
+            
+            # Calculate the aspect ratios
+            current_aspect_ratio = original_width / original_height
+            
+            if current_aspect_ratio > target_aspect_ratio:  # Original is wider than 9:16, need to crop width
+                # Calculate the width needed to match target aspect ratio if height is kept
+                new_width = int(original_height * target_aspect_ratio)
+                left = (original_width - new_width) // 2
+                top = 0
+                right = left + new_width
+                bottom = original_height
+            else:  # Original is taller or same aspect ratio as 9:16, need to crop height (less common)
+                # Calculate the height needed to match target aspect ratio if width is kept
+                new_height = int(original_width / target_aspect_ratio)
+                left = 0
+                top = (original_height - new_height) // 2
+                right = original_width
+                bottom = top + new_height
+                
+            # Crop the image
+            cropped_img = img.crop((left, top, right, bottom))
+            
+            # Resize the cropped image to the target resolution
+            final_img = cropped_img.resize((target_width, target_height), Image.LANCZOS)
+        else:
+            # REGULAR VIDEO PROCESSING: Keep 16:9 aspect ratio
+            # We will simply resize while maintaining the original aspect ratio
+            # Most YouTube thumbnails are already 16:9, so usually no need to crop
+            target_width = 1280  # Common width for 720p
+            target_height = 720  # Height for 720p (16:9 aspect ratio)
+            
+            # Resize while maintaining aspect ratio
+            img.thumbnail((target_width, target_height), Image.LANCZOS)
+            final_img = img
 
         # Save the processed image to a BytesIO object
         output = BytesIO()
-        final_img.save(output, format="JPEG", quality=90) # Save as JPEG with good quality
+        final_img.save(output, format="JPEG", quality=90)  # Save as JPEG with good quality
         output.seek(0)
 
-        return send_file(output, mimetype='image/jpeg', as_attachment=True, download_name=f"{video_id}_shorts_thumbnail.jpg")
+        return send_file(output, mimetype='image/jpeg', as_attachment=True, download_name=download_name)
     except requests.exceptions.RequestException as e:
         app.logger.error(f"Failed to download thumbnail for {video_id}: {e}")
         return "Thumbnail not found", 404

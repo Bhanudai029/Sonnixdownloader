@@ -1,9 +1,10 @@
-Flask
-yt-dlp
-requests
-google-api-python-client
-python-dotenv
-Pillow
+Flask==2.3.3
+Werkzeug==2.3.7
+yt-dlp==2023.11.16
+requests==2.31.0
+python-dotenv==1.0.0
+google-api-python-client==2.107.0
+Pillow==10.0.1
 gunicorn
 python-socks
 beautifulsoup4

@@ -794,7 +794,11 @@
                     (data) => {
                         currentChannelId = data.channel_id || '';
                         const thumbnailEl = document.getElementById('thumbnail');
-                        if (thumbnailEl) thumbnailEl.src = `/download_thumbnail/${data.id}`;
+                        if (thumbnailEl) {
+                            // Check if this is a YouTube Shorts URL
+                            const isShorts = currentUrl.toLowerCase().includes('/shorts/');
+                            thumbnailEl.src = `/download_thumbnail/${data.id}?is_shorts=${isShorts}`;
+                        }
                         const titleEl = document.getElementById('title');
                         if (titleEl) titleEl.textContent = data.title || 'N/A';
                         const channelLogoEl = document.getElementById('channelLogo');
