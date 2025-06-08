@@ -802,7 +802,41 @@
                         const titleEl = document.getElementById('title');
                         if (titleEl) titleEl.textContent = data.title || 'N/A';
                         const channelLogoEl = document.getElementById('channelLogo');
-                        if (channelLogoEl) channelLogoEl.src = data.channel_logo || '';
+                        if (channelLogoEl) {
+                            if (data.channel_logo) {
+                                channelLogoEl.src = data.channel_logo;
+                                channelLogoEl.onerror = function() {
+                                    // If loading from direct URL fails, try through our endpoint
+                                    if (data.channel_id) {
+                                        console.log('Direct channel logo load failed, trying through endpoint');
+                                        channelLogoEl.src = `/download_channel_logo/${data.channel_id}`;
+                                        
+                                        // Add another error handler if that also fails
+                                        channelLogoEl.onerror = function() {
+                                            console.log('Channel logo endpoint also failed, using placeholder');
+                                            channelLogoEl.src = 'https://via.placeholder.com/60x60?text=CH';
+                                        };
+                                    } else {
+                                        console.log('Channel logo load failed, using placeholder');
+                                        channelLogoEl.src = 'https://via.placeholder.com/60x60?text=CH';
+                                    }
+                                };
+                            } else if (data.channel_id) {
+                                // If no direct logo URL but we have channel ID, try our endpoint
+                                console.log('No channel logo URL, trying through endpoint');
+                                channelLogoEl.src = `/download_channel_logo/${data.channel_id}`;
+                                
+                                // Add error handler
+                                channelLogoEl.onerror = function() {
+                                    console.log('Channel logo endpoint failed, using placeholder');
+                                    channelLogoEl.src = 'https://via.placeholder.com/60x60?text=CH';
+                                };
+                            } else {
+                                // No logo URL and no channel ID, use placeholder
+                                console.log('No channel info available, using placeholder');
+                                channelLogoEl.src = 'https://via.placeholder.com/60x60?text=CH';
+                            }
+                        }
                         const channelNameEl = document.getElementById('channelName');
                         if (channelNameEl) channelNameEl.textContent = data.channel_name || 'N/A';
                         const subscribersEl = document.getElementById('subscribers');
