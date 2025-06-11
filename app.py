@@ -99,14 +99,8 @@ def detect_browser_from_user_agent(user_agent_string):
 # Function to get a YouTube API service
 def get_youtube_service():
     if not API_KEY:
-        app.logger.error("YouTube API key is required but not set in .env file")
-        raise ValueError("YouTube API key is required but not set in .env file. Please add YOUTUBE_API_KEY=your_api_key to your .env file.")
-    
-    try:
-        return build('youtube', 'v3', developerKey=API_KEY, cache_discovery=False)
-    except Exception as e:
-        app.logger.error(f"Error building YouTube service: {str(e)}")
-        raise ValueError(f"Failed to initialize YouTube API: {str(e)}. Check if your API key is valid.")
+        raise ValueError("YouTube API key is required but not set")
+    return build('youtube', 'v3', developerKey=API_KEY, cache_discovery=False)
 
 # Format numbers for display (e.g., 1000 -> 1K, 1000000 -> 1M)
 def format_count(count_str):
@@ -287,10 +281,6 @@ def create_cookie_file(cookies_content, identifier="default"):
             pass
         return None
 
-def sanitize_filename(filename):
-    """Sanitize a string to be a valid filename."""
-    return re.sub(r'[\/\\?%*:|"<>]', '_', filename)
-
 # Custom progress hook to log yt-dlp status
 def ydl_progress_hook(d):
     if d['status'] == 'downloading':
@@ -342,10 +332,6 @@ def fetch_info():
 
     # API call to get more details like subscribers, likes
     try:
-        if not API_KEY:
-            app.logger.warning("YouTube API key is not set. Using fallback info from yt-dlp only.")
-            raise ValueError("API key not set")
-            
         youtube_service = get_youtube_service()
         video_response = youtube_service.videos().list(
             part='snippet,statistics,contentDetails',
@@ -489,6 +475,7 @@ def download_video():
     data = request.json
     url = data.get('url')
     quality = data.get('quality', 'best')
+    app.logger.info(f"Received download request for URL: {url}, Quality: {quality}")
     cookies_content = data.get('cookies_content')
     user_agent = request.headers.get('User-Agent')
     video_id, is_shorts = extract_video_id(url)
@@ -536,29 +523,69 @@ def download_video():
             if EFFECTIVE_YTDLP_PROXY_URL:
                 yt_dlp_base_cmd.extend(['--proxy', EFFECTIVE_YTDLP_PROXY_URL])
 
-            # --- NEW: MP3 Specific Download Logic ---
+            app.logger.info(f"Checking quality for MP3 download: {quality}")
+            # --- Applying the working MP3 logic from mp3_test.py ---
             if quality == 'mp3':
-                app.logger.info("--- 🚀 Downloading MP3 Audio Only ---")
-                mp3_opts = yt_dlp_base_cmd + [
-                    '-f', 'bestaudio/best',
-                    '--extract-audio',
-                    '--audio-format', 'mp3',
-                    '--audio-quality', '192K',
-                    '-o', os.path.join(download_dir, '%(title)s.%(ext)s'),
+                app.logger.info("--- 🚀 Downloading and Converting MP3 ---")
+                
+                # Step 1: Get the direct download URL for the best audio stream
+                app.logger.info("Step 1/3: Getting direct audio URL from yt-dlp...")
+                get_url_opts = yt_dlp_base_cmd + [
+                    '-f', 'bestaudio',
+                    '--get-url',
                     url
                 ]
-                process_mp3 = subprocess.run(mp3_opts, check=True, capture_output=True, text=True)
-                app.logger.info(f"MP3 STDOUT: \n{process_mp3.stdout}")
-                app.logger.error(f"MP3 STDERR: \n{process_mp3.stderr}")
+                process_get_url = subprocess.run(get_url_opts, check=True, capture_output=True, text=True, encoding='utf-8')
+                audio_url = process_get_url.stdout.strip()
+                if not audio_url.startswith('http'):
+                    raise Exception(f"Failed to get a valid audio URL. yt-dlp output: {audio_url}")
+                app.logger.info(f"✅ Got audio URL: {audio_url[:70]}...")
 
-                # Determine the filename by finding the newest MP3 in the directory
-                download_dir_abs = os.path.join(os.getcwd(), download_dir)
-                list_of_files = [f for f in os.listdir(download_dir_abs) if f.endswith('.mp3')]
-                if not list_of_files:
-                    raise Exception(f"Failed to find MP3 file after download. STDOUT: {process_mp3.stdout}, STDERR: {process_mp3.stderr}")
+                # Step 2: Download the audio from the URL using requests
+                app.logger.info("Step 2/3: Downloading audio stream using Python requests...")
+                temp_audio_filepath = os.path.join(temp_dir, 'downloaded_audio_stream') # Use a generic name, we don't know the extension
+                
+                # Pass the user's User-Agent to requests to avoid being throttled
+                headers = {'User-Agent': user_agent} if user_agent else {}
+                with requests.get(audio_url, stream=True, headers=headers) as r:
+                    r.raise_for_status()
+                    with open(temp_audio_filepath, 'wb') as f:
+                        for chunk in r.iter_content(chunk_size=8192):
+                            f.write(chunk)
+                
+                if not os.path.exists(temp_audio_filepath) or os.path.getsize(temp_audio_filepath) == 0:
+                    raise Exception("Failed to download audio file or the file is empty.")
+                app.logger.info(f"✅ Temporary audio stream downloaded to: {temp_audio_filepath}")
 
-                final_filename = max(list_of_files, key=lambda f: os.path.getctime(os.path.join(download_dir_abs, f)))
-                app.logger.info(f"✅✅✅ MP3 Download complete! ✅✅✅")
+                # Step 3: Use FFmpeg to convert the temporary audio file to MP3
+                try:
+                    # Get video title for the final filename from yt-dlp's info_dict
+                    ydl_info = yt_dlp.YoutubeDL({'quiet': True, 'skip_download': True, 'simulate': True}).extract_info(url, download=False)
+                    title = ydl_info.get('title', 'audio')
+                    app.logger.info(f"Extracted title for MP3 filename: {title}")
+                except Exception as info_e:
+                    app.logger.warning(f"Could not get video title for MP3 filename: {info_e}. Using 'audio'.")
+                    title = 'audio'
+
+                safe_title = "".join(c for c in title if c.isalnum() or c in (' ', '_', '-')).rstrip()
+                final_output_mp3_path = os.path.join(download_dir, f"{safe_title}.mp3")
+                app.logger.info(f"Step 3/3: Converting to MP3 using FFmpeg. Final path: {final_output_mp3_path}")
+
+                ffmpeg_convert_opts = [
+                    ffmpeg_path,
+                    '-i', temp_audio_filepath, # Input the temporary downloaded audio
+                    '-vn',                # No video (ensure only audio is processed)
+                    '-c:a', 'libmp3lame', # Use libmp3lame for MP3 encoding (ensure it's installed/available with ffmpeg)
+                    '-b:a', '192k',       # Set high-quality audio bitrate
+                    '-y',                 # Overwrite output file without asking
+                    final_output_mp3_path
+                ]
+                process_ffmpeg_convert = subprocess.run(ffmpeg_convert_opts, check=True, capture_output=True, text=True)
+                app.logger.info(f"FFmpeg MP3 conversion STDOUT: \n{process_ffmpeg_convert.stdout}")
+                app.logger.error(f"FFmpeg MP3 conversion STDERR: \n{process_ffmpeg_convert.stderr}")
+
+                final_filename = os.path.basename(final_output_mp3_path)
+                app.logger.info(f"✅✅✅ MP3 Download and Conversion complete! ✅✅✅")
                 app.logger.info(f"Final MP3 file saved to: {final_filename}")
 
                 return jsonify({
@@ -602,17 +629,20 @@ def download_video():
 
                 # --- Step 3: Merge and Convert Audio with FFmpeg ---
                 app.logger.info(f"\n--- Step 3 of 3: Merging video and converting audio to MP3 ---\n")
-                # Get video title for the final filename from yt-dlp\'s info_dict
+                # Get video title for the final filename from yt-dlp's info_dict
                 try:
                     # Use a separate, minimal yt-dlp instance just for info extraction to avoid conflicts
                     ydl_info = yt_dlp.YoutubeDL({'quiet': True, 'skip_download': True, 'simulate': True}).extract_info(url, download=False)
                     title = ydl_info.get('title', 'video')
+                    app.logger.info(f"Extracted title for filename: {title}")
                 except Exception as info_e:
-                    app.logger.warning(f"Could not get video title for filename: {info_e}. Using \'video\'.")
+                    app.logger.warning(f"Could not get video title for filename: {info_e}. Using 'video'.")
                     title = 'video'
 
                 safe_title = "".join(c for c in title if c.isalnum() or c in (' ', '_', '-')).rstrip()
+                app.logger.info(f"Safe title for filename: {safe_title}")
                 final_output_path = os.path.join(download_dir, f"{safe_title}_{quality}.mp4")
+                app.logger.info(f"Final output path on server: {final_output_path}")
                 
                 merge_opts = [
                     ffmpeg_path,
@@ -629,6 +659,8 @@ def download_video():
                 app.logger.error(f"Merge STDERR: \n{process_merge.stderr}")
 
                 final_filename = os.path.basename(final_output_path)
+                app.logger.info(f"Final filename sent to frontend: {final_filename}")
+                app.logger.info(f"Download URL sent to frontend: /downloads/{final_filename}")
                 app.logger.info(f"✅✅✅ Download and conversion complete! ✅✅✅")
                 app.logger.info(f"Final file saved to: {final_filename}")
 
@@ -672,22 +704,32 @@ def download_video():
 def serve_downloaded_file(filename):
     """Serves a downloaded file for the user to download."""
     directory = os.path.join(os.getcwd(), app.config['DOWNLOAD_FOLDER'])
-    sanitized_filename = sanitize_filename(os.path.basename(filename)) # Basic security
+    
+    app.logger.info(f"Serving download for filename: {filename}")
     
     # Security check to prevent directory traversal
-    if ".." in sanitized_filename or sanitized_filename.startswith("/"):
+    if ".." in filename or filename.startswith(("/", "\\")):
+        app.logger.warning(f"Potential directory traversal attempt blocked: {filename}")
         return "Invalid filename", 400
         
-    file_path = os.path.join(directory, sanitized_filename)
+    file_path = os.path.join(directory, filename)
 
     if not os.path.isfile(file_path):
-        app.logger.error(f"Requested file not found: {file_path}")
+        app.logger.error(f"Requested file not found at path: {file_path}")
         return "File not found.", 404
 
     try:
-        return send_from_directory(directory, sanitized_filename, as_attachment=True)
+        # Determine mimetype based on file extension for better browser compatibility
+        mimetype = None
+        if filename.lower().endswith('.mp3'):
+            mimetype = 'audio/mpeg'
+        elif filename.lower().endswith('.mp4'):
+            mimetype = 'video/mp4'
+        
+        # Using send_file for more control over response headers like mimetype
+        return send_file(file_path, as_attachment=True, mimetype=mimetype)
     except Exception as e:
-        app.logger.error(f"Error sending file {sanitized_filename}: {e}")
+        app.logger.error(f"Error sending file {filename}: {e}")
         return "Error serving file.", 500
 
 @app.route('/download_thumbnail/<video_id>')
@@ -769,11 +811,6 @@ def download_thumbnail(video_id):
 @app.route('/download_channel_logo/<channel_id>')
 def download_channel_logo(channel_id):
     try:
-        # First, check if we have a valid API key
-        if not API_KEY:
-            app.logger.error("YouTube API key is not set. Cannot fetch channel logo.")
-            return "YouTube API key is required but not set. Please add it to your .env file.", 500
-            
         youtube_service = get_youtube_service()
         channel_response = youtube_service.channels().list(
             part='snippet',
@@ -830,7 +867,6 @@ def download_channel_logo(channel_id):
 
         # Return the circular logo as PNG (to preserve transparency)
         return send_file(output, mimetype='image/png', as_attachment=True, download_name=f"{channel_id}_circular_logo.png")
-
     except Exception as e:
         app.logger.error(f"Failed to download channel logo for {channel_id}: {e}")
         return "Logo not found", 404

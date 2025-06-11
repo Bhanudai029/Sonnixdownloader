@@ -797,9 +797,7 @@
                         if (thumbnailEl) {
                             // Check if this is a YouTube Shorts URL
                             const isShorts = currentUrl.toLowerCase().includes('/shorts/');
-                            const thumbnailUrl = `/download_thumbnail/${data.id}?is_shorts=${isShorts}`;
-                            thumbnailEl.src = thumbnailUrl;
-                            console.log('Thumbnail URL:', thumbnailUrl);
+                            thumbnailEl.src = `/download_thumbnail/${data.id}?is_shorts=${isShorts}`;
                         }
                         const titleEl = document.getElementById('title');
                         if (titleEl) titleEl.textContent = data.title || 'N/A';
@@ -929,8 +927,7 @@
                     displayError('Could not extract video ID from URL.');
                     return;
                 }
-                const isShorts = currentUrl.toLowerCase().includes('/shorts/');
-                window.location.href = `/download_thumbnail/${videoId}?is_shorts=${isShorts}`;
+                window.location.href = `/download_thumbnail/${videoId}`;
                 return;
             }
             

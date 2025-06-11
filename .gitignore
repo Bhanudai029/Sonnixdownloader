@@ -1,18 +1,28 @@
-# Python bytecode
-__pycache__/
-*.py[cod]
-*$py.class
-
-# Virtual environments
-venv/
-env/
-ENV/
-
-# Environment files
+# Environment variables
 .env
 
-# Downloaded content
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+pip-log.txt
+pip-delete-this-directory.txt
+.eggs/
+.egg-info/
+dist/
+build/
+*.egg
+
+# Static files - if you have a folder for them
+# static/
+
+# Downloads folder - typically you don't commit downloaded content
 downloads/
+downloads/temp_audio_staging/
 
 # Cookie files
 cookies/
