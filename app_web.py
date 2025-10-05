@@ -485,40 +485,67 @@ class YouTubeAutoDownloaderWeb:
                 yt_dlp_options.insert(4, str(COOKIES_PATH))
                 self.log("   🍪 Using cookies.txt for download")
             
-            self.log("   ⚙️ Starting yt-dlp (max 90s / 1.5 min timeout)...")
+            self.log("   ⚙️ Starting yt-dlp (90s hard limit with process group kill)...")
             start_time = time.time()
             
+            import signal
+            import os
+            
             try:
-                result = subprocess.run(
+                # Use Popen for better process control
+                process = subprocess.Popen(
                     yt_dlp_options,
-                    capture_output=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
                     text=True,
-                    timeout=90
+                    preexec_fn=os.setsid if hasattr(os, 'setsid') else None  # Create process group on Unix
                 )
                 
-                elapsed = time.time() - start_time
-                self.log(f"   ⏱️ Completed in {elapsed:.1f}s")
-            except subprocess.TimeoutExpired as e:
-                elapsed = time.time() - start_time
-                self.log(f"⏰ TIMEOUT after {elapsed:.1f}s (exceeded 90s limit)")
-                self.log(f"   🐛 DEBUG: yt-dlp was killed due to timeout")
-                self.log(f"   Possible causes:")
-                self.log(f"   1. Slow network on Render free tier")
-                self.log(f"   2. YouTube throttling/bot detection")
-                self.log(f"   3. Large video file")
-                self.log(f"   4. Cookies expired/invalid")
-                
-                # Try to log partial output
-                if e.stdout:
-                    self.log(f"   📤 Partial stdout:")
-                    for line in e.stdout.decode('utf-8', errors='ignore').split('\n')[-5:]:
-                        if line.strip():
-                            self.log(f"      {line[:200]}")
-                if e.stderr:
-                    self.log(f"   📤 Partial stderr:")
-                    for line in e.stderr.decode('utf-8', errors='ignore').split('\n')[-5:]:
-                        if line.strip():
-                            self.log(f"      {line[:200]}")
+                try:
+                    stdout, stderr = process.communicate(timeout=90)
+                    elapsed = time.time() - start_time
+                    self.log(f"   ⏱️ Completed in {elapsed:.1f}s")
+                    
+                    result = type('obj', (object,), {
+                        'returncode': process.returncode,
+                        'stdout': stdout,
+                        'stderr': stderr
+                    })()
+                    
+                except subprocess.TimeoutExpired:
+                    elapsed = time.time() - start_time
+                    self.log(f"⏰ HARD TIMEOUT after {elapsed:.1f}s - killing yt-dlp process group")
+                    
+                    # Kill the entire process group to ensure all child processes die
+                    try:
+                        if hasattr(os, 'killpg'):
+                            os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+                        else:
+                            process.kill()
+                    except:
+                        pass
+                    
+                    # Get partial output
+                    try:
+                        stdout, stderr = process.communicate(timeout=2)
+                    except:
+                        stdout, stderr = "", ""
+                    
+                    self.log(f"   🐛 DEBUG: Process forcefully killed after timeout")
+                    self.log(f"   Common causes on Render:")
+                    self.log(f"   1. Slow network throttling download")
+                    self.log(f"   2. YouTube bot detection / rate limiting")
+                    self.log(f"   3. Video is geoblocked or restricted")
+                    
+                    if stdout:
+                        self.log(f"   📤 Partial output (last 5 lines):")
+                        for line in stdout.strip().split('\n')[-5:]:
+                            if line.strip():
+                                self.log(f"      {line[:200]}")
+                    
+                    return False
+            except Exception as e:
+                self.log(f"💥 Process error: {str(e)[:200]}")
                 return False
             
             if result.returncode == 0:
