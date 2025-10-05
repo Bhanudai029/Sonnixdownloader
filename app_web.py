@@ -458,6 +458,11 @@ class YouTubeAutoDownloaderWeb:
                 '--extract-audio',
                 '--audio-format', 'mp3',
                 '--audio-quality', '192K',
+                '--socket-timeout', '15',
+                '--retries', '2',
+                '--fragment-retries', '2',
+                '--force-ipv4',
+                '--no-progress',
                 '--no-playlist',
                 '--no-warnings',
                 '--ignore-errors',
@@ -481,7 +486,7 @@ class YouTubeAutoDownloaderWeb:
                 yt_dlp_options,
                 capture_output=True,
                 text=True,
-                timeout=300
+                timeout=240
             )
             
             if result.returncode == 0:
