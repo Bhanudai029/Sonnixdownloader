@@ -456,7 +456,7 @@ class YouTubeAutoDownloaderWeb:
 
             # Update progress to show we're using ezconv
             with progress_lock:
-                download_progress['phase'] = 'Converting via ezconv.com (fast process)...'
+                download_progress['phase'] = 'Converting via ezconv.com (waiting 20s)...'
 
             # Use Selenium to automate ezconv.com
             try:
@@ -511,9 +511,9 @@ class YouTubeAutoDownloaderWeb:
                     # Take screenshot after clicking convert
                     self.capture_screenshot("after_convert_click")
 
-                    self.log(f"   🔍 Immediately looking for 'Download MP3' button...")
-                    # Wait a short time for conversion to start
-                    time.sleep(2)
+                    self.log(f"   ⏳ Waiting 20 seconds for conversion to complete...")
+                    # Wait 20 seconds for conversion
+                    time.sleep(20)
 
                     self.log(f"   🔍 Looking for 'Download MP3' button...")
                     # Look for the Download MP3 button using XPath
@@ -524,6 +524,10 @@ class YouTubeAutoDownloaderWeb:
                         self.log(f"   ✅ Found 'Download MP3' button, clicking...")
                         download_button.click()
                         self.log(f"   🎯 Clicked 'Download MP3' button")
+
+                        # Update UI to show button was clicked
+                        with progress_lock:
+                            download_progress['phase'] = 'Clicked download button - downloading...'
 
                         # Take screenshot after clicking download
                         self.capture_screenshot("after_download_click")
