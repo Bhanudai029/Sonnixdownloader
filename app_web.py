@@ -406,10 +406,26 @@ class YouTubeAutoDownloaderWeb:
                 return True
             else:
                 self.log(f"❌ Failed to download: {song_name}")
+                # Log the actual error from yt-dlp
+                if result.stderr:
+                    error_lines = result.stderr.strip().split('\n')
+                    # Log last few lines of error (most relevant)
+                    for line in error_lines[-5:]:
+                        if line.strip():
+                            self.log(f"   Error: {line[:150]}")
+                if result.stdout:
+                    stdout_lines = result.stdout.strip().split('\n')
+                    # Log last few lines of stdout
+                    for line in stdout_lines[-3:]:
+                        if line.strip():
+                            self.log(f"   Output: {line[:150]}")
                 return False
                 
+        except subprocess.TimeoutExpired:
+            self.log(f"⏰ Timeout: Download took too long (>5 min)")
+            return False
         except Exception as e:
-            self.log(f"💥 Error: {str(e)[:50]}")
+            self.log(f"💥 Error: {str(e)[:200]}")
             return False
 
     def cleanup(self):
