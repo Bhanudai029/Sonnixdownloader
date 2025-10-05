@@ -265,25 +265,45 @@ class YouTubeAutoDownloaderWeb:
             retry_text = f" (Retry {retry_attempt + 1}/{max_retries + 1})" if retry_attempt > 0 else ""
             self.log(f"🔍 Searching for: {song_name}{retry_text}")
             
-            self.driver.set_page_load_timeout(45)
-            self.driver.get(search_url)
-            # Handle consent if it appears
-            try:
-                if self.handle_consent_if_present():
-                    # After consent, reload search results to ensure layout is correct
-                    self.driver.get(search_url + "&hl=en&gl=US")
-            except Exception:
-                pass
-            time.sleep(5)  # Longer wait for page load
+            # Reduce timeout to fail faster
+            self.driver.set_page_load_timeout(30)
             
             try:
-                # Wait for ANY video result with longer timeout
-                WebDriverWait(self.driver, 30).until(
+                self.log("   📡 Loading YouTube search page...")
+                self.driver.get(search_url)
+                self.log("   ✅ Page loaded")
+            except Exception as e:
+                self.log(f"   ⚠️ Page load issue: {str(e)[:80]}")
+                self.capture_screenshot("page_load_failed")
+                raise
+            
+            # Capture screenshot right after load to see what we got
+            self.capture_screenshot("after_page_load")
+            
+            # Handle consent if it appears
+            try:
+                self.log("   🔍 Checking for consent dialogs...")
+                if self.handle_consent_if_present():
+                    self.log("   🔄 Reloading with EN locale...")
+                    self.driver.get(search_url + "&hl=en&gl=US")
+                    self.capture_screenshot("after_consent")
+            except Exception as e:
+                self.log(f"   ⚠️ Consent handling issue: {str(e)[:60]}")
+            
+            self.log("   ⏳ Waiting for page to stabilize...")
+            time.sleep(3)
+            
+            try:
+                self.log("   🔎 Looking for video elements...")
+                # Wait for ANY video result with reduced timeout
+                WebDriverWait(self.driver, 20).until(
                     EC.presence_of_element_located((By.CSS_SELECTOR, "a#video-title"))
                 )
+                self.log("   ✅ Video elements found!")
                 
                 # Find all video links (simpler selector)
                 video_links = self.driver.find_elements(By.CSS_SELECTOR, "a#video-title")
+                self.log(f"   📋 Found {len(video_links)} video links")
                 
                 if not video_links:
                     self.log("   ❌ No video links found")
@@ -291,47 +311,53 @@ class YouTubeAutoDownloaderWeb:
                     return None
                 
                 # Get first non-shorts video
-                for link in video_links[:5]:  # Check first 5 results
+                for i, link in enumerate(video_links[:5], 1):
                     try:
                         href = link.get_attribute('href')
                         if not href or '/shorts/' in href:
                             continue
                         
                         title = link.get_attribute('title') or "Unknown"
-                        self.log(f"   🎯 Found: {title[:50]}...")
+                        self.log(f"   🎯 Video {i}: {title[:50]}...")
                         
                         # Extract video ID directly from href
                         video_id = self.extract_video_id(href)
                         if video_id:
                             clean_url = f"https://www.youtube.com/watch?v={video_id}"
-                            self.log(f"   ✅ Video URL: {clean_url}")
+                            self.log(f"   ✅ Selected: {clean_url}")
                             return clean_url
-                    except:
+                    except Exception as e:
+                        self.log(f"   ⚠️ Skipping video {i}: {str(e)[:40]}")
                         continue
                 
-                self.log("   ❌ No valid videos found")
+                self.log("   ❌ No valid videos found in results")
+                self.capture_screenshot("no_valid_videos")
                 return None
                         
             except TimeoutException:
-                self.log("   ❌ Timeout waiting for video results")
-                self.capture_screenshot("timeout")
-                # Try handling consent then retry once more before giving up for this attempt
+                self.log("   ❌ TIMEOUT waiting for video results!")
+                self.capture_screenshot("timeout_waiting")
+                
+                # Try handling consent then retry once more
                 try:
+                    self.log("   🔄 Trying consent handling as last resort...")
                     if self.handle_consent_if_present():
                         time.sleep(2)
                         return self.search_youtube(song_name, retry_attempt, max_retries)
                 except Exception:
                     pass
+                
                 if retry_attempt < max_retries:
-                    self.log(f"   🔄 Retrying search...")
-                    time.sleep(8)
+                    self.log(f"   🔄 Retrying search (attempt {retry_attempt + 2}/{max_retries + 1})...")
+                    time.sleep(5)
                     return self.search_youtube(song_name, retry_attempt + 1, max_retries)
                 return None
                 
         except Exception as e:
-            self.log(f"❌ Error searching YouTube: {str(e)[:100]}")
-            self.capture_screenshot("exception")
+            self.log(f"❌ EXCEPTION in search: {str(e)[:150]}")
+            self.capture_screenshot("search_exception")
             if retry_attempt < max_retries:
+                self.log(f"   🔄 Retrying after exception...")
                 time.sleep(5)
                 return self.search_youtube(song_name, retry_attempt + 1, max_retries)
             return None
