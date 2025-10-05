@@ -456,7 +456,7 @@ class YouTubeAutoDownloaderWeb:
 
             # Update progress to show we're using ezconv
             with progress_lock:
-                download_progress['phase'] = 'Converting via ezconv.com (waiting 20s)...'
+                download_progress['phase'] = 'Converting via ezconv.com...'
 
             # Use Selenium to automate ezconv.com
             try:
@@ -477,6 +477,10 @@ class YouTubeAutoDownloaderWeb:
                 chrome_options.add_argument("--window-size=1920,1080")
                 chrome_options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
 
+                # Update UI to show browser starting
+                with progress_lock:
+                    download_progress['phase'] = 'Starting headless browser...'
+
                 self.log(f"   🌐 Starting headless browser...")
                 driver = webdriver.Chrome(options=chrome_options)
 
@@ -485,8 +489,16 @@ class YouTubeAutoDownloaderWeb:
                 self.driver = driver
 
                 try:
+                    # Update UI to show navigation
+                    with progress_lock:
+                        download_progress['phase'] = 'Navigating to ezconv.com...'
+
                     self.log(f"   🌐 Navigating to ezconv.com...")
                     driver.get("https://ezconv.com/v820")
+
+                    # Update UI to show waiting for page load
+                    with progress_lock:
+                        download_progress['phase'] = 'Loading ezconv.com page...'
 
                     # Wait for page to load
                     WebDriverWait(driver, 10).until(
@@ -500,8 +512,12 @@ class YouTubeAutoDownloaderWeb:
                     input_field.send_keys(url)
 
                     self.log(f"   ⏳ Waiting 0.75 seconds...")
-                    # Wait 0.75 seconds as requested
-                    time.sleep(0.75)
+                    # Wait 0.75 seconds as requested with progress updates
+                    for i in range(8):  # 8 * 0.1 = 0.8 seconds (close to 0.75)
+                        time.sleep(0.1)
+                        if i % 2 == 0:  # Update every 0.2 seconds
+                            with progress_lock:
+                                download_progress['phase'] = f'Waiting 0.75 seconds... ({i*0.1:.1f}s)'
 
                     self.log(f"   ⚙️ Clicking convert button...")
                     # Click the convert button
@@ -512,8 +528,12 @@ class YouTubeAutoDownloaderWeb:
                     self.capture_screenshot("after_convert_click")
 
                     self.log(f"   ⏳ Waiting 20 seconds for conversion to complete...")
-                    # Wait 20 seconds for conversion
-                    time.sleep(20)
+                    # Wait 20 seconds for conversion with progress updates
+                    for i in range(20):  # 20 seconds
+                        time.sleep(1)
+                        # Update progress every second
+                        with progress_lock:
+                            download_progress['phase'] = f'Converting via ezconv.com (waiting {19-i}s)...'
 
                     self.log(f"   🔍 Looking for 'Download MP3' button...")
                     # Look for the Download MP3 button using XPath
@@ -527,7 +547,7 @@ class YouTubeAutoDownloaderWeb:
 
                         # Update UI to show button was clicked
                         with progress_lock:
-                            download_progress['phase'] = 'Clicked download button - downloading...'
+                            download_progress['phase'] = 'Clicked download button - processing...'
 
                         # Take screenshot after clicking download
                         self.capture_screenshot("after_download_click")
@@ -579,6 +599,10 @@ class YouTubeAutoDownloaderWeb:
                     self.log(f"   🌐 Downloading from: {download_url}")
                     response = requests.get(download_url, stream=True, timeout=30)
                     response.raise_for_status()
+
+                    # Update UI to show downloading
+                    with progress_lock:
+                        download_progress['phase'] = 'Downloading audio file...'
 
                     # Save to audio folder
                     audio_path = self.audio_folder / f'{clean_song_name}.mp3'
