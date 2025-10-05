@@ -485,40 +485,85 @@ class YouTubeAutoDownloaderWeb:
                 yt_dlp_options.insert(4, str(COOKIES_PATH))
                 self.log("   🍪 Using cookies.txt for download")
             
-            self.log("   ⚙️ Starting yt-dlp with 10s socket timeout & 120s total limit...")
+            self.log("   ⚙️ Starting yt-dlp (max 90s / 1.5 min timeout)...")
             start_time = time.time()
             
-            result = subprocess.run(
-                yt_dlp_options,
-                capture_output=True,
-                text=True,
-                timeout=120
-            )
-            
-            elapsed = time.time() - start_time
-            self.log(f"   ⏱️ yt-dlp completed in {elapsed:.1f}s")
+            try:
+                result = subprocess.run(
+                    yt_dlp_options,
+                    capture_output=True,
+                    text=True,
+                    timeout=90
+                )
+                
+                elapsed = time.time() - start_time
+                self.log(f"   ⏱️ Completed in {elapsed:.1f}s")
+            except subprocess.TimeoutExpired as e:
+                elapsed = time.time() - start_time
+                self.log(f"⏰ TIMEOUT after {elapsed:.1f}s (exceeded 90s limit)")
+                self.log(f"   🐛 DEBUG: yt-dlp was killed due to timeout")
+                self.log(f"   Possible causes:")
+                self.log(f"   1. Slow network on Render free tier")
+                self.log(f"   2. YouTube throttling/bot detection")
+                self.log(f"   3. Large video file")
+                self.log(f"   4. Cookies expired/invalid")
+                
+                # Try to log partial output
+                if e.stdout:
+                    self.log(f"   📤 Partial stdout:")
+                    for line in e.stdout.decode('utf-8', errors='ignore').split('\n')[-5:]:
+                        if line.strip():
+                            self.log(f"      {line[:200]}")
+                if e.stderr:
+                    self.log(f"   📤 Partial stderr:")
+                    for line in e.stderr.decode('utf-8', errors='ignore').split('\n')[-5:]:
+                        if line.strip():
+                            self.log(f"      {line[:200]}")
+                return False
             
             if result.returncode == 0:
                 self.log(f"✅ Audio downloaded: {song_name}")
                 return True
             else:
-                self.log(f"❌ Failed to download: {song_name} (exit code: {result.returncode})")
-                # Log the actual error from yt-dlp (verbose output)
+                self.log(f"❌ DOWNLOAD FAILED: {song_name}")
+                self.log(f"   🐛 DEBUG: yt-dlp exit code: {result.returncode}")
+                
+                # Common exit codes
+                exit_code_meanings = {
+                    1: "Generic error",
+                    2: "Interrupted by user",
+                    101: "Video unavailable",
+                }
+                if result.returncode in exit_code_meanings:
+                    self.log(f"   Meaning: {exit_code_meanings[result.returncode]}")
+                
+                # Log verbose error output
+                self.log(f"   📤 yt-dlp ERROR OUTPUT:")
                 if result.stderr:
                     error_lines = result.stderr.strip().split('\n')
-                    for line in error_lines[-10:]:
+                    for line in error_lines[-15:]:
                         if line.strip():
-                            self.log(f"   stderr: {line[:200]}")
+                            self.log(f"      {line[:250]}")
+                
                 if result.stdout:
+                    self.log(f"   📤 yt-dlp STDOUT (last 10 lines):")
                     stdout_lines = result.stdout.strip().split('\n')
                     for line in stdout_lines[-10:]:
                         if line.strip():
-                            self.log(f"   stdout: {line[:200]}")
-                return False
+                            self.log(f"      {line[:250]}")
                 
-        except subprocess.TimeoutExpired:
-            self.log(f"⏰ TIMEOUT: yt-dlp exceeded 120s - network stall/YouTube throttling/bot detection")
-            return False
+                # Check for common error patterns
+                full_output = (result.stderr + result.stdout).lower()
+                if 'sign in' in full_output or 'bot' in full_output:
+                    self.log(f"   ⚠️ Detected: YouTube bot detection - try updating cookies")
+                elif 'unavailable' in full_output or 'private' in full_output:
+                    self.log(f"   ⚠️ Detected: Video is unavailable or private")
+                elif 'http error' in full_output or 'urllib' in full_output:
+                    self.log(f"   ⚠️ Detected: Network/HTTP error")
+                elif 'timeout' in full_output:
+                    self.log(f"   ⚠️ Detected: Network timeout during download")
+                
+                return False
         except Exception as e:
             self.log(f"💥 Error: {str(e)[:200]}")
             return False
