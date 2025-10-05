@@ -468,8 +468,9 @@
                     'error': '❌'
                 };
                 
+                const phaseText = data.phase ? ` • ${data.phase}` : '';
                 document.getElementById('status').textContent = 
-                    statusEmoji[data.status] + ' ' + data.status.toUpperCase();
+                    statusEmoji[data.status] + ' ' + data.status.toUpperCase() + phaseText;
                 
                 // Update progress bar
                 if (data.total > 0) {

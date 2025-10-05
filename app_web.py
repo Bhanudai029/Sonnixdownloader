@@ -69,6 +69,7 @@ download_progress = {
     'total': 0,
     'results': [],
     'logs': [],
+    'phase': '',  # human-readable step description for UI
     'screenshots': []  # List of screenshot URLs
 }
 progress_lock = threading.Lock()
@@ -567,6 +568,7 @@ def process_songs():
         with progress_lock:
             steps_per_song = 2 + (1 if downloader.enable_supabase else 0)  # search, audio, [upload audio]
             download_progress['total'] = len(songs) * steps_per_song
+            download_progress['phase'] = 'Initializing'
             download_progress['logs'].append(
                 f"📝 Found {len(songs)} songs to process • Total steps: {download_progress['total']}"
             )
@@ -595,12 +597,15 @@ def process_in_background(songs):
         for i, song in enumerate(songs, 1):
             with progress_lock:
                 download_progress['current_song'] = song
+                download_progress['phase'] = 'Searching for video'
             
             downloader.log(f"\n📍 Processing {i}/{len(songs)}: {song}")
             video_url = downloader.search_youtube(song)
             # Step done: search
             with progress_lock:
                 download_progress['progress'] += 1
+                if video_url:
+                    download_progress['phase'] = 'Successfully found video URL'
                 download_progress['logs'].append("🔎 Search step completed")
             
             if video_url:
@@ -627,12 +632,14 @@ def process_in_background(songs):
         for url, song_name in video_data:
             # Indicate step: downloading audio
             with progress_lock:
+                download_progress['phase'] = 'Downloading audio'
                 download_progress['logs'].append(f"🎵 Downloading audio: {song_name}")
             if downloader.download_single_audio(url, song_name):
                 success_count += 1
             # Step done: audio download (even if failed we count the attempt)
             with progress_lock:
                 download_progress['progress'] += 1
+                download_progress['phase'] = 'Successfully downloaded audio'
                 
                 # Upload to Supabase if enabled
                 if downloader.enable_supabase and downloader.supabase_uploader:
@@ -651,6 +658,9 @@ def process_in_background(songs):
                         )
                         if audio_url:
                             downloader.log(f"   ✅ Audio URL: {audio_url}")
+                            with progress_lock:
+                                download_progress['logs'].append(f"🔗 Supabase Audio URL: {audio_url}")
+                                download_progress['phase'] = 'Successfully uploaded audio to Supabase'
                         else:
                             downloader.log(f"   ⚠️ Audio upload failed")
                         # Step done: audio upload
