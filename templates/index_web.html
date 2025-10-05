@@ -385,7 +385,57 @@
             transform: translateY(-2px);
             box-shadow: 0 8px 20px rgba(255, 59, 48, 0.4);
         }
-        
+
+        /* Download Timer */
+        .timer-container {
+            position: fixed;
+            top: 50%;
+            right: 20px;
+            transform: translateY(-50%);
+            background: rgba(15, 20, 31, 0.95);
+            backdrop-filter: blur(20px);
+            border: 2px solid rgba(0, 212, 255, 0.3);
+            border-radius: 20px;
+            padding: 20px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5),
+                        0 0 50px rgba(0, 212, 255, 0.1);
+            z-index: 1000;
+            display: none;
+            animation: slideInRight 0.3s ease-out;
+        }
+
+        .timer-container.show {
+            display: block;
+        }
+
+        .timer-display {
+            font-family: 'Courier New', monospace;
+            font-size: 2.5em;
+            font-weight: bold;
+            color: #00d4ff;
+            text-align: center;
+            text-shadow: 0 0 20px rgba(0, 212, 255, 0.5);
+            margin-bottom: 10px;
+        }
+
+        .timer-label {
+            color: #b4c0cc;
+            font-size: 0.9em;
+            text-align: center;
+            opacity: 0.8;
+        }
+
+        @keyframes slideInRight {
+            from {
+                opacity: 0;
+                transform: translate(100%, -50%);
+            }
+            to {
+                opacity: 1;
+                transform: translate(0, -50%);
+            }
+        }
+
         @keyframes pulse-glow {
             0%, 100% {
                 box-shadow: 0 0 20px rgba(255, 59, 48, 0.3);
@@ -399,9 +449,19 @@
             .header h1 {
                 font-size: 1.8em;
             }
-            
+
             .button-group {
                 flex-direction: column;
+            }
+
+            .timer-container {
+                right: 10px;
+                padding: 15px;
+                font-size: 0.9em;
+            }
+
+            .timer-display {
+                font-size: 2em;
             }
         }
     </style>
@@ -500,9 +560,12 @@
             document.getElementById('startBtn').disabled = true;
             document.getElementById('resetBtn').disabled = false;
             document.getElementById('songs').disabled = true;
-            
+
             // Show progress section
             document.getElementById('progressSection').classList.add('active');
+
+            // Start the timer
+            startTimer();
             
             try {
                 const response = await fetch('/api/process', {
@@ -553,6 +616,11 @@
                     cookieAlert.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
                 } else {
                     cookieAlert.classList.remove('show');
+                }
+
+                // Stop timer when download completes or errors
+                if (data.status === 'completed' || data.status === 'error') {
+                    stopTimer();
                 }
                 
                 // Update progress bar
@@ -711,6 +779,9 @@
             
             // Hide cookie alert when resetting
             document.getElementById('cookieAlert').classList.remove('show');
+
+            // Stop the timer
+            stopTimer();
         }
         
         // Helper functions for cookie alert buttons
@@ -740,6 +811,38 @@
                     cookieTextarea.style.border = '';
                 }, 2000);
             }
+        }
+
+        // Download Timer functionality
+        let timerInterval = null;
+        let startTime = null;
+
+        function startTimer() {
+            startTime = Date.now();
+            document.getElementById('timerContainer').classList.add('show');
+
+            timerInterval = setInterval(updateTimer, 1000);
+        }
+
+        function updateTimer() {
+            if (!startTime) return;
+
+            const elapsed = Date.now() - startTime;
+            const minutes = Math.floor(elapsed / 60000);
+            const seconds = Math.floor((elapsed % 60000) / 1000);
+
+            const timeString = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+            document.getElementById('timerDisplay').textContent = timeString;
+        }
+
+        function stopTimer() {
+            if (timerInterval) {
+                clearInterval(timerInterval);
+                timerInterval = null;
+            }
+            startTime = null;
+            document.getElementById('timerContainer').classList.remove('show');
+            document.getElementById('timerDisplay').textContent = '00:00';
         }
     </script>
 </body>
