@@ -619,7 +619,14 @@ def process_in_background(songs):
         success_count = 0
         uploaded_count = 0
         for url, song_name in video_data:
+            # Indicate step: downloading thumbnail
+            with progress_lock:
+                download_progress['logs'].append(f"🖼️ Downloading thumbnail: {song_name}")
             downloader.download_single_thumbnail(url, song_name)
+
+            # Indicate step: downloading audio
+            with progress_lock:
+                download_progress['logs'].append(f"🎵 Downloading audio: {song_name}")
             if downloader.download_single_audio(url, song_name):
                 success_count += 1
                 
@@ -637,7 +644,7 @@ def process_in_background(songs):
                     # Upload audio
                     if audio_file.exists():
                         audio_url = downloader.supabase_uploader.upload_audio(
-                            str(audio_file), song_name
+                            str(audio_file), f"{clean_song_name}.mp3"
                         )
                         if audio_url:
                             downloader.log(f"   ✅ Audio URL: {audio_url}")
@@ -647,7 +654,7 @@ def process_in_background(songs):
                     # Upload thumbnail
                     if thumbnail_file.exists():
                         thumbnail_url = downloader.supabase_uploader.upload_thumbnail(
-                            str(thumbnail_file), song_name
+                            str(thumbnail_file), f"{clean_song_name}.png"
                         )
                         if thumbnail_url:
                             downloader.log(f"   ✅ Thumbnail URL: {thumbnail_url}")

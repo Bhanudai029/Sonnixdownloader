@@ -20,6 +20,10 @@ class SupabaseUploader:
             from supabase import Client
             self.supabase = Client(supabase_url, supabase_key)
 
+        # Buckets (configurable via env)
+        self.audio_bucket = os.environ.get("SUPABASE_AUDIO_BUCKET", "audio-files")
+        self.thumbnail_bucket = os.environ.get("SUPABASE_THUMBNAIL_BUCKET", "thumbnails")
+
     def upload_audio_file(self, file_path: str, bucket_name: str = "audio-files",
                          file_name: Optional[str] = None) -> dict:
         """
@@ -63,6 +67,50 @@ class SupabaseUploader:
         except Exception as e:
             print(f"❌ Error uploading {file_path}: {str(e)}")
             raise
+
+    def upload_audio(self, file_path: str, display_name: Optional[str] = None) -> Optional[str]:
+        """Upload a single audio file and return its public URL."""
+        try:
+            file_name = Path(file_path).name if not display_name else display_name
+            with open(file_path, 'rb') as f:
+                file_content = f.read()
+
+            self.supabase.storage.from_(self.audio_bucket).upload(
+                path=file_name,
+                file=file_content,
+                file_options={
+                    "content-type": self._get_audio_content_type(file_path),
+                    "cache-control": "3600",
+                    "upsert": "false"
+                }
+            )
+
+            return self.get_public_url(file_name, self.audio_bucket)
+        except Exception as e:
+            print(f"❌ Audio upload failed for {file_path}: {str(e)}")
+            return ""
+
+    def upload_thumbnail(self, file_path: str, display_name: Optional[str] = None) -> Optional[str]:
+        """Upload a single thumbnail image and return its public URL."""
+        try:
+            file_name = Path(file_path).name if not display_name else display_name
+            with open(file_path, 'rb') as f:
+                file_content = f.read()
+
+            self.supabase.storage.from_(self.thumbnail_bucket).upload(
+                path=file_name,
+                file=file_content,
+                file_options={
+                    "content-type": self._get_image_content_type(file_path),
+                    "cache-control": "3600",
+                    "upsert": "false"
+                }
+            )
+
+            return self.get_public_url(file_name, self.thumbnail_bucket)
+        except Exception as e:
+            print(f"❌ Thumbnail upload failed for {file_path}: {str(e)}")
+            return ""
 
     def upload_audio_files_batch(self, file_paths: list, bucket_name: str = "audio-files") -> list:
         """
@@ -121,8 +169,17 @@ class SupabaseUploader:
             str: Properly URL-encoded public URL of the file
         """
         try:
-            # Get the raw public URL from Supabase
-            raw_url = self.supabase.storage.from_(bucket_name).get_public_url(file_name)
+            # Get the raw public URL from Supabase (handle dict or str return types)
+            raw = self.supabase.storage.from_(bucket_name).get_public_url(file_name)
+            if isinstance(raw, dict):
+                if 'publicUrl' in raw:
+                    raw_url = raw['publicUrl']
+                elif 'data' in raw and isinstance(raw['data'], dict) and 'publicUrl' in raw['data']:
+                    raw_url = raw['data']['publicUrl']
+                else:
+                    raw_url = str(raw)
+            else:
+                raw_url = str(raw)
             
             # Clean up any trailing query parameters (like '?' at the end)
             if raw_url.endswith('?'):
@@ -167,6 +224,19 @@ class SupabaseUploader:
             '.aac': 'audio/aac',
             '.ogg': 'audio/ogg',
             '.flac': 'audio/flac'
+        }
+
+        return content_types.get(extension, 'application/octet-stream')
+
+    def _get_image_content_type(self, file_path: str) -> str:
+        """Get the appropriate content type for image files"""
+        extension = Path(file_path).suffix.lower()
+
+        content_types = {
+            '.png': 'image/png',
+            '.jpg': 'image/jpeg',
+            '.jpeg': 'image/jpeg',
+            '.webp': 'image/webp'
         }
 
         return content_types.get(extension, 'application/octet-stream')
