@@ -488,10 +488,14 @@ class YouTubeAutoDownloaderWeb:
             
             self.log("   ⚙️ Starting yt-dlp (90s hard limit with process group kill)...")
             start_time = time.time()
-            
+
             import signal
             import os
-            
+
+            # Send initial download progress update
+            with progress_lock:
+                download_progress['phase'] = 'Downloading audio (actively processing...)'
+
             try:
                 # Use Popen for better process control
                 process = subprocess.Popen(
@@ -501,22 +505,35 @@ class YouTubeAutoDownloaderWeb:
                     text=True,
                     preexec_fn=os.setsid if hasattr(os, 'setsid') else None  # Create process group on Unix
                 )
-                
+
                 try:
-                    stdout, stderr = process.communicate(timeout=90)
+                    # Poll for output every few seconds to show activity
+                    last_update = time.time()
+                    while process.poll() is None:
+                        if time.time() - last_update > 5:  # Update every 5 seconds
+                            elapsed = time.time() - start_time
+                            self.log(f"   ⏳ Still downloading... ({elapsed:.1f}s elapsed)")
+                            with progress_lock:
+                                download_progress['phase'] = f'Downloading audio (actively processing... {elapsed:.0f}s)'
+                            last_update = time.time()
+
+                        time.sleep(1)  # Check every second
+
+                    # Process completed
+                    stdout, stderr = process.communicate()
                     elapsed = time.time() - start_time
                     self.log(f"   ⏱️ Completed in {elapsed:.1f}s")
-                    
+
                     result = type('obj', (object,), {
                         'returncode': process.returncode,
                         'stdout': stdout,
                         'stderr': stderr
                     })()
-                    
+
                 except subprocess.TimeoutExpired:
                     elapsed = time.time() - start_time
                     self.log(f"⏰ HARD TIMEOUT after {elapsed:.1f}s - killing yt-dlp process group")
-                    
+
                     # Kill the entire process group to ensure all child processes die
                     try:
                         if hasattr(os, 'killpg'):
@@ -525,30 +542,30 @@ class YouTubeAutoDownloaderWeb:
                             process.kill()
                     except:
                         pass
-                    
+
                     # Get partial output
                     try:
                         stdout, stderr = process.communicate(timeout=2)
                     except:
                         stdout, stderr = "", ""
-                    
+
                     self.log(f"   🐛 DEBUG: Process forcefully killed after timeout")
                     self.log(f"   Common causes on Render:")
                     self.log(f"   1. Slow network throttling download")
                     self.log(f"   2. YouTube bot detection / rate limiting - may need fresh cookies")
                     self.log(f"   3. Video is geoblocked or restricted")
-                    
+
                     # Check if it's a cookie issue
                     if stdout and ('login' in stdout.lower() or 'sign in' in stdout.lower()):
                         self.log(f"   🔑 ACTION REQUIRED: Please update your cookies")
                         download_progress['needs_cookies'] = True
-                    
+
                     if stdout:
                         self.log(f"   📤 Partial output (last 5 lines):")
                         for line in stdout.strip().split('\n')[-5:]:
                             if line.strip():
                                 self.log(f"      {line[:200]}")
-                    
+
                     return False
             except Exception as e:
                 self.log(f"💥 Process error: {str(e)[:200]}")
@@ -556,6 +573,9 @@ class YouTubeAutoDownloaderWeb:
             
             if result.returncode == 0:
                 self.log(f"✅ Audio downloaded: {song_name}")
+                # Reset phase on success
+                with progress_lock:
+                    download_progress['phase'] = 'Successfully downloaded audio'
                 return True
             else:
                 self.log(f"❌ DOWNLOAD FAILED: {song_name}")
@@ -600,7 +620,12 @@ class YouTubeAutoDownloaderWeb:
                     self.log(f"   ⚠️ Detected: Network/HTTP error")
                 elif 'timeout' in full_output:
                     self.log(f"   ⚠️ Detected: Network timeout during download")
-                
+
+                # Set status to error on failure
+                with progress_lock:
+                    download_progress['status'] = 'error'
+                    download_progress['phase'] = 'Download failed - check logs for details'
+
                 return False
         except Exception as e:
             self.log(f"💥 Error: {str(e)[:200]}")
@@ -734,10 +759,12 @@ def process_in_background(songs):
                 download_progress['logs'].append(f"🎵 Downloading audio: {song_name}")
             if downloader.download_single_audio(url, song_name):
                 success_count += 1
+                # Set status to completed on success
+                with progress_lock:
+                    download_progress['status'] = 'completed'
             # Step done: audio download (even if failed we count the attempt)
             with progress_lock:
                 download_progress['progress'] += 1
-                download_progress['phase'] = 'Successfully downloaded audio'
                 
                 # Upload to Supabase if enabled
                 if downloader.enable_supabase and downloader.supabase_uploader:
