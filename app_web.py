@@ -135,6 +135,7 @@ class YouTubeAutoDownloaderWeb:
         chrome_options.add_argument("--disable-blink-features=AutomationControlled")
         chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
         chrome_options.add_experimental_option('useAutomationExtension', False)
+        chrome_options.add_argument("--lang=en-US,en")
         
         # User agent to avoid detection
         chrome_options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36")
@@ -165,6 +166,56 @@ class YouTubeAutoDownloaderWeb:
             self.log(f"❌ Failed to setup browser: {e}")
             self.log("💡 Make sure Chrome/Chromium and chromedriver are installed")
             return False
+
+    def handle_consent_if_present(self):
+        """Attempt to accept Google/YouTube consent dialogs if present."""
+        try:
+            time.sleep(2)
+            current_url = self.driver.current_url.lower() if self.driver else ""
+            page_source = (self.driver.page_source or "").lower()
+
+            # Common consent pages (consent.google.com)
+            if "consent" in current_url or "consent" in page_source:
+                selectors = [
+                    "button[aria-label*='Accept all']",
+                    "button[aria-label*='I agree']",
+                    "form[action*='consent'] button[type='submit']",
+                    "button#L2AG",
+                    "button[aria-label*='Accept']",
+                ]
+                for css in selectors:
+                    try:
+                        btn = WebDriverWait(self.driver, 5).until(
+                            EC.element_to_be_clickable((By.CSS_SELECTOR, css))
+                        )
+                        self.driver.execute_script("arguments[0].click();", btn)
+                        self.log("✅ Accepted Google consent dialog")
+                        time.sleep(2)
+                        return True
+                    except Exception:
+                        continue
+
+            # YouTube consent bump inside the page
+            yt_selectors = [
+                "tp-yt-paper-button[aria-label*='I agree']",
+                "tp-yt-paper-button[aria-label*='Accept all']",
+                "button[aria-label*='I agree']",
+            ]
+            for css in yt_selectors:
+                try:
+                    btn = WebDriverWait(self.driver, 5).until(
+                        EC.element_to_be_clickable((By.CSS_SELECTOR, css))
+                    )
+                    self.driver.execute_script("arguments[0].click();", btn)
+                    self.log("✅ Accepted YouTube consent dialog")
+                    time.sleep(2)
+                    return True
+                except Exception:
+                    continue
+
+        except Exception as e:
+            self.log(f"⚠️ Consent handling failed: {str(e)[:60]}")
+        return False
 
     def parse_song_list(self, song_input):
         """Parse song list from text input (supports various formats)"""
@@ -216,6 +267,13 @@ class YouTubeAutoDownloaderWeb:
             
             self.driver.set_page_load_timeout(45)
             self.driver.get(search_url)
+            # Handle consent if it appears
+            try:
+                if self.handle_consent_if_present():
+                    # After consent, reload search results to ensure layout is correct
+                    self.driver.get(search_url + "&hl=en&gl=US")
+            except Exception:
+                pass
             time.sleep(5)  # Longer wait for page load
             
             try:
@@ -257,6 +315,13 @@ class YouTubeAutoDownloaderWeb:
             except TimeoutException:
                 self.log("   ❌ Timeout waiting for video results")
                 self.capture_screenshot("timeout")
+                # Try handling consent then retry once more before giving up for this attempt
+                try:
+                    if self.handle_consent_if_present():
+                        time.sleep(2)
+                        return self.search_youtube(song_name, retry_attempt, max_retries)
+                except Exception:
+                    pass
                 if retry_attempt < max_retries:
                     self.log(f"   🔄 Retrying search...")
                     time.sleep(8)
