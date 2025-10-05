@@ -484,18 +484,50 @@ class YouTubeAutoDownloaderWeb:
                 old_driver = getattr(self, 'driver', None)
                 self.driver = driver
 
-                try:
-                    self.log(f"   🌐 Navigating to ezconv.com...")
-                    driver.get("https://ezconv.com/v820")
+                max_retries = 3
+                for attempt in range(max_retries):
+                    try:
+                        self.log(f"   🌐 Navigating to ezconv.com... (attempt {attempt + 1}/{max_retries})")
+                        driver.get("https://ezconv.com/v820")
 
-                    # Wait for page to load
-                    WebDriverWait(driver, 10).until(
-                        EC.presence_of_element_located((By.CSS_SELECTOR, "input[type='text']"))
-                    )
+                        # Wait for page to load with multiple fallback selectors
+                        self.log(f"   ⏳ Waiting for page to load...")
+                        try:
+                            # Try multiple selectors for the input field
+                            input_selectors = [
+                                "input[type='text']",
+                                "input[placeholder*='YouTube']",
+                                "input[placeholder*='youtube']",
+                                "textarea",
+                                ".input-field",
+                                "input"
+                            ]
+
+                            input_field = None
+                            for selector in input_selectors:
+                                try:
+                                    input_field = WebDriverWait(driver, 8).until(
+                                        EC.presence_of_element_located((By.CSS_SELECTOR, selector))
+                                    )
+                                    self.log(f"   ✅ Found input field with selector: {selector}")
+                                    break
+                                except:
+                                    continue
+
+                            if not input_field:
+                                raise Exception("No input field found with any selector")
+
+                        except Exception as e:
+                            self.log(f"   ⚠️ Page load issue: {str(e)[:100]}")
+                            if attempt < max_retries - 1:
+                                self.log(f"   🔄 Retrying navigation...")
+                                time.sleep(2)
+                                continue
+                            else:
+                                raise Exception(f"Failed to load ezconv.com after {max_retries} attempts")
 
                     self.log(f"   📋 Pasting YouTube URL...")
-                    # Find the input field and paste the URL
-                    input_field = driver.find_element(By.CSS_SELECTOR, "input[type='text']")
+                    # Use the input field we already found
                     input_field.clear()
                     input_field.send_keys(url)
 
@@ -504,9 +536,37 @@ class YouTubeAutoDownloaderWeb:
                     time.sleep(0.75)
 
                     self.log(f"   ⚙️ Clicking convert button...")
-                    # Click the convert button
-                    convert_button = driver.find_element(By.CSS_SELECTOR, "button[type='submit'], input[type='submit']")
+                    # Click the convert button with multiple selectors
+                    convert_selectors = [
+                        "button[type='submit']",
+                        "input[type='submit']",
+                        "button:contains('Convert')",
+                        "button[class*='convert']",
+                        ".convert-btn",
+                        "button"
+                    ]
+
+                    convert_button = None
+                    for selector in convert_selectors:
+                        try:
+                            if "contains" in selector:
+                                # Handle pseudo-selectors manually
+                                buttons = driver.find_elements(By.CSS_SELECTOR, "button")
+                                for btn in buttons:
+                                    if "convert" in btn.text.lower():
+                                        convert_button = btn
+                                        break
+                            else:
+                                convert_button = driver.find_element(By.CSS_SELECTOR, selector)
+                                break
+                        except:
+                            continue
+
+                    if not convert_button:
+                        raise Exception("Could not find convert button")
+
                     convert_button.click()
+                    self.log(f"   ✅ Convert button clicked")
 
                     # Take screenshot after clicking convert
                     self.capture_screenshot("after_convert_click")
@@ -516,21 +576,73 @@ class YouTubeAutoDownloaderWeb:
                     time.sleep(20)
 
                     self.log(f"   🔍 Looking for 'Download MP3' button...")
-                    # Look for the Download MP3 button using XPath
-                    try:
-                        download_button = WebDriverWait(driver, 15).until(
-                            EC.element_to_be_clickable((By.XPATH, "//button[normalize-space()='Download MP3']"))
-                        )
-                        self.log(f"   ✅ Found 'Download MP3' button, clicking...")
-                        download_button.click()
-                        self.log(f"   🎯 Clicked 'Download MP3' button")
+                    # Look for the Download MP3 button with multiple methods
+                    download_button = None
+                    max_download_attempts = 3
 
-                        # Update UI to show button was clicked
-                        with progress_lock:
-                            download_progress['phase'] = 'Clicked download button - downloading...'
+                    for attempt in range(max_download_attempts):
+                        try:
+                            self.log(f"   🔍 Download attempt {attempt + 1}/{max_download_attempts}...")
 
-                        # Take screenshot after clicking download
-                        self.capture_screenshot("after_download_click")
+                            # Try XPath first (most specific)
+                            download_button = WebDriverWait(driver, 5).until(
+                                EC.element_to_be_clickable((By.XPATH, "//button[normalize-space()='Download MP3']"))
+                            )
+                            self.log(f"   ✅ Found 'Download MP3' button with XPath")
+                            break
+
+                        except:
+                            # Try multiple CSS selectors
+                            download_selectors = [
+                                "button:contains('Download MP3')",
+                                "button:contains('Download')",
+                                "a[href*='download']",
+                                "a[href*='.mp3']",
+                                ".download-btn",
+                                "button[class*='download']"
+                            ]
+
+                            for selector in download_selectors:
+                                try:
+                                    if "contains" in selector:
+                                        # Handle pseudo-selectors manually
+                                        elements = driver.find_elements(By.CSS_SELECTOR, selector.replace(":contains('Download MP3')", "").replace(":contains('Download')", ""))
+                                        for elem in elements:
+                                            if "download" in elem.text.lower() or "mp3" in elem.text.lower():
+                                                download_button = elem
+                                                break
+                                    else:
+                                        download_button = driver.find_element(By.CSS_SELECTOR, selector)
+                                        break
+                                except:
+                                    continue
+
+                                if download_button:
+                                    break
+
+                            if download_button:
+                                self.log(f"   ✅ Found download button with selector: {selector}")
+                                break
+
+                        # Wait before next attempt
+                        if attempt < max_download_attempts - 1:
+                            time.sleep(3)
+
+                    if not download_button:
+                        self.log(f"   ❌ Download button not found after {max_download_attempts} attempts")
+                        self.capture_screenshot("download_button_not_found")
+                        raise Exception("Could not find Download MP3 button")
+
+                    self.log(f"   🎯 Clicking download button...")
+                    download_button.click()
+                    self.log(f"   ✅ Download button clicked successfully")
+
+                    # Update UI to show button was clicked
+                    with progress_lock:
+                        download_progress['phase'] = 'Clicked download button - downloading...'
+
+                    # Take screenshot after clicking download
+                    self.capture_screenshot("after_download_click")
 
                     except Exception as e:
                         self.log(f"   ⚠️ 'Download MP3' button not found, looking for alternative...")
@@ -568,10 +680,18 @@ class YouTubeAutoDownloaderWeb:
                             else:
                                 self.log(f"   ❌ No download URL found")
                                 self.capture_screenshot("no_download_url")
+                                # Set error status
+                                with progress_lock:
+                                    download_progress['status'] = 'error'
+                                    download_progress['phase'] = 'Download URL not found - check logs'
                                 raise Exception("No download URL found after clicking Download MP3 button")
                         except Exception as e:
                             self.log(f"   ❌ Error finding download link: {str(e)[:100]}")
                             self.capture_screenshot("download_link_error")
+                            # Set error status
+                            with progress_lock:
+                                download_progress['status'] = 'error'
+                                download_progress['phase'] = 'Download link error - check logs'
                             raise Exception(f"Error finding download link: {str(e)[:100]}")
 
                     # Download the file
@@ -607,12 +727,19 @@ class YouTubeAutoDownloaderWeb:
 
             except Exception as e:
                 self.log(f"   ❌ Error automating ezconv.com: {str(e)[:200]}")
+                self.log(f"   🐛 Debug info: Current URL: {driver.current_url if 'driver' in locals() else 'N/A'}")
                 # Take screenshot of the error state (if driver is available)
                 try:
                     if hasattr(self, 'driver') and self.driver:
                         self.capture_screenshot("ezconv_error")
                 except:
                     pass  # Don't let screenshot errors break the main error
+
+                # Set error status
+                with progress_lock:
+                    download_progress['status'] = 'error'
+                    download_progress['phase'] = 'ezconv.com automation failed - check logs'
+
                 raise
 
             # Reset phase on success
