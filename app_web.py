@@ -179,55 +179,57 @@ class YouTubeAutoDownloaderWeb:
             retry_text = f" (Retry {retry_attempt + 1}/{max_retries + 1})" if retry_attempt > 0 else ""
             self.log(f"🔍 Searching for: {song_name}{retry_text}")
             
-            self.driver.set_page_load_timeout(30)
+            self.driver.set_page_load_timeout(45)
             self.driver.get(search_url)
-            time.sleep(3)
+            time.sleep(5)  # Longer wait for page load
             
             try:
-                WebDriverWait(self.driver, 15).until(
-                    EC.presence_of_element_located((By.CSS_SELECTOR, "ytd-video-renderer"))
+                # Wait for ANY video result with longer timeout
+                WebDriverWait(self.driver, 30).until(
+                    EC.presence_of_element_located((By.CSS_SELECTOR, "a#video-title"))
                 )
                 
-                first_video = WebDriverWait(self.driver, 15).until(
-                    EC.element_to_be_clickable((By.CSS_SELECTOR, "ytd-video-renderer ytd-thumbnail a#thumbnail"))
-                )
+                # Find all video links (simpler selector)
+                video_links = self.driver.find_elements(By.CSS_SELECTOR, "a#video-title")
                 
-                title_element = self.driver.find_element(By.CSS_SELECTOR, "ytd-video-renderer ytd-rich-metadata-renderer:nth-of-type(1) #video-title")
-                video_title = title_element.get_attribute("title") if title_element else "Unknown Title"
+                if not video_links:
+                    self.log("   ❌ No video links found")
+                    return None
                 
-                self.log(f"   🎯 Found: {video_title[:60]}...")
+                # Get first non-shorts video
+                for link in video_links[:5]:  # Check first 5 results
+                    try:
+                        href = link.get_attribute('href')
+                        if not href or '/shorts/' in href:
+                            continue
+                        
+                        title = link.get_attribute('title') or "Unknown"
+                        self.log(f"   🎯 Found: {title[:50]}...")
+                        
+                        # Extract video ID directly from href
+                        video_id = self.extract_video_id(href)
+                        if video_id:
+                            clean_url = f"https://www.youtube.com/watch?v={video_id}"
+                            self.log(f"   ✅ Video URL: {clean_url}")
+                            return clean_url
+                    except:
+                        continue
                 
-                first_video.click()
-                time.sleep(2)
-                current_url = self.driver.current_url
-                
-                if self.is_shorts_url(current_url):
-                    self.log(f"   🔄 Detected Shorts URL, searching for long-form video...")
-                    self.driver.back()
-                    time.sleep(2)
-                    return self.find_long_form_video()
-                else:
-                    video_id = self.extract_video_id(current_url)
-                    if video_id:
-                        clean_url = f"https://www.youtube.com/watch?v={video_id}"
-                        self.log(f"   ✅ Video URL: {clean_url}")
-                        return clean_url
-                    else:
-                        self.log(f"   ❌ Could not extract video ID")
-                        return None
+                self.log("   ❌ No valid videos found")
+                return None
                         
             except TimeoutException:
                 self.log("   ❌ Timeout waiting for video results")
                 if retry_attempt < max_retries:
                     self.log(f"   🔄 Retrying search...")
-                    time.sleep(5)
+                    time.sleep(8)
                     return self.search_youtube(song_name, retry_attempt + 1, max_retries)
                 return None
                 
         except Exception as e:
             self.log(f"❌ Error searching YouTube: {str(e)[:100]}")
             if retry_attempt < max_retries:
-                time.sleep(3)
+                time.sleep(5)
                 return self.search_youtube(song_name, retry_attempt + 1, max_retries)
             return None
 
