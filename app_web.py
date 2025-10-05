@@ -456,7 +456,7 @@ class YouTubeAutoDownloaderWeb:
 
             # Update progress to show we're using ezconv
             with progress_lock:
-                download_progress['phase'] = 'Converting via ezconv.com...'
+                download_progress['phase'] = 'Converting via ezconv.com (fast process)...'
 
             # Use Selenium to automate ezconv.com
             try:
@@ -499,6 +499,10 @@ class YouTubeAutoDownloaderWeb:
                     input_field.clear()
                     input_field.send_keys(url)
 
+                    self.log(f"   ⏳ Waiting 0.75 seconds...")
+                    # Wait 0.75 seconds as requested
+                    time.sleep(0.75)
+
                     self.log(f"   ⚙️ Clicking convert button...")
                     # Click the convert button
                     convert_button = driver.find_element(By.CSS_SELECTOR, "button[type='submit'], input[type='submit']")
@@ -507,18 +511,19 @@ class YouTubeAutoDownloaderWeb:
                     # Take screenshot after clicking convert
                     self.capture_screenshot("after_convert_click")
 
-                    self.log(f"   ⏳ Waiting 20 seconds for conversion...")
-                    # Wait 20 seconds as suggested
-                    time.sleep(20)
+                    self.log(f"   🔍 Immediately looking for 'Download MP3' button...")
+                    # Wait a short time for conversion to start
+                    time.sleep(2)
 
                     self.log(f"   🔍 Looking for 'Download MP3' button...")
                     # Look for the Download MP3 button using XPath
                     try:
-                        download_button = WebDriverWait(driver, 10).until(
+                        download_button = WebDriverWait(driver, 15).until(
                             EC.element_to_be_clickable((By.XPATH, "//button[normalize-space()='Download MP3']"))
                         )
+                        self.log(f"   ✅ Found 'Download MP3' button, clicking...")
                         download_button.click()
-                        self.log(f"   ✅ Clicked 'Download MP3' button")
+                        self.log(f"   🎯 Clicked 'Download MP3' button")
 
                         # Take screenshot after clicking download
                         self.capture_screenshot("after_download_click")
@@ -540,56 +545,34 @@ class YouTubeAutoDownloaderWeb:
                     # Take screenshot of the final conversion page
                     self.capture_screenshot("conversion_complete")
 
-                    # Get download URL - try multiple methods
-                    download_url = None
-                    max_attempts = 3
+                    self.log(f"   💾 Starting download process...")
 
-                    for attempt in range(max_attempts):
-                        self.log(f"   🔍 Attempt {attempt + 1}/{max_attempts} to find download URL...")
+                    # After clicking Download MP3, check if we get redirected to a download URL
+                    time.sleep(3)
+                    current_url = driver.current_url
 
+                    if 'download' in current_url.lower() or '.mp3' in current_url.lower():
+                        download_url = current_url
+                        self.log(f"   🔗 Got download URL from redirect: {download_url}")
+                    else:
+                        # Fallback: look for download links on the page
                         try:
-                            # Method 1: Look for Download MP3 button again (in case it appeared)
-                            download_button = driver.find_element(By.XPATH, "//button[normalize-space()='Download MP3']")
-                            download_button.click()
-                            self.log(f"   ✅ Clicked Download MP3 button (attempt {attempt + 1})")
-                            time.sleep(2)
-
-                            # Check if we got redirected to a download URL
-                            current_url = driver.current_url
-                            if 'download' in current_url.lower() or '.mp3' in current_url.lower():
-                                download_url = current_url
-                                self.log(f"   🔗 Got download URL from redirect: {download_url}")
-                                break
-
-                        except:
-                            # Method 2: Look for download links
-                            try:
-                                download_links = driver.find_elements(By.CSS_SELECTOR, "a[href*='download'], a[href*='.mp3']")
-                                if download_links:
-                                    download_url = download_links[0].get_attribute("href")
-                                    self.log(f"   🔗 Found download link: {download_url}")
-                                    break
-                            except:
-                                pass
-
-                        # Method 3: Check current URL (might have redirected)
-                        current_url = driver.current_url
-                        if current_url != "https://ezconv.com/v820" and ('download' in current_url.lower() or '.mp3' in current_url.lower()):
-                            download_url = current_url
-                            self.log(f"   🔗 Got download URL from current page: {download_url}")
-                            break
-
-                        # Wait before next attempt
-                        if attempt < max_attempts - 1:
-                            time.sleep(3)
-
-                    if not download_url:
-                        self.log(f"   ❌ Could not find download URL after {max_attempts} attempts")
-                        self.capture_screenshot("no_download_url")
-                        raise Exception("Could not find download URL after conversion")
+                            download_links = driver.find_elements(By.CSS_SELECTOR, "a[href*='download'], a[href*='.mp3']")
+                            if download_links:
+                                download_url = download_links[0].get_attribute("href")
+                                self.log(f"   🔗 Found download link: {download_url}")
+                            else:
+                                self.log(f"   ❌ No download URL found")
+                                self.capture_screenshot("no_download_url")
+                                raise Exception("No download URL found after clicking Download MP3 button")
+                        except Exception as e:
+                            self.log(f"   ❌ Error finding download link: {str(e)[:100]}")
+                            self.capture_screenshot("download_link_error")
+                            raise Exception(f"Error finding download link: {str(e)[:100]}")
 
                     # Download the file
                     import requests
+                    self.log(f"   🌐 Downloading from: {download_url}")
                     response = requests.get(download_url, stream=True, timeout=30)
                     response.raise_for_status()
 
@@ -599,7 +582,7 @@ class YouTubeAutoDownloaderWeb:
                         for chunk in response.iter_content(chunk_size=8192):
                             f.write(chunk)
 
-                    self.log(f"   ✅ Successfully downloaded: {audio_path}")
+                    self.log(f"   ✅ Successfully downloaded audio file: {audio_path}")
 
                 finally:
                     # Restore original driver or set to None
