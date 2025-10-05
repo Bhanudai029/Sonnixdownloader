@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube Auto Downloader</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            opacity: 0.9;
+            font-size: 1.1em;
+        }
+        
+        .content {
+            padding: 30px;
+        }
+        
+        .input-section {
+            margin-bottom: 30px;
+        }
+        
+        .input-section label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 10px;
+            color: #333;
+            font-size: 1.1em;
+        }
+        
+        .input-section textarea {
+            width: 100%;
+            min-height: 200px;
+            padding: 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 14px;
+            resize: vertical;
+            transition: border-color 0.3s;
+        }
+        
+        .input-section textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .example {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 15px;
+            border-left: 4px solid #667eea;
+        }
+        
+        .example h4 {
+            color: #667eea;
+            margin-bottom: 10px;
+        }
+        
+        .example code {
+            display: block;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 13px;
+            line-height: 1.6;
+            color: #555;
+        }
+        
+        .button-group {
+            display: flex;
+            gap: 15px;
+            margin-top: 20px;
+        }
+        
+        button {
+            flex: 1;
+            padding: 15px 30px;
+            font-size: 1.1em;
+            font-weight: 600;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn-secondary {
+            background: #f0f0f0;
+            color: #333;
+        }
+        
+        .btn-secondary:hover:not(:disabled) {
+            background: #e0e0e0;
+        }
+        
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        
+        .progress-section {
+            display: none;
+            margin-top: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 10px;
+        }
+        
+        .progress-section.active {
+            display: block;
+        }
+        
+        .progress-bar-container {
+            width: 100%;
+            height: 30px;
+            background: #e0e0e0;
+            border-radius: 15px;
+            overflow: hidden;
+            margin: 15px 0;
+        }
+        
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            transition: width 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 600;
+        }
+        
+        .status {
+            text-align: center;
+            font-size: 1.2em;
+            margin-bottom: 10px;
+            font-weight: 600;
+        }
+        
+        .logs {
+            max-height: 400px;
+            overflow-y: auto;
+            background: #1e1e1e;
+            color: #00ff00;
+            padding: 15px;
+            border-radius: 10px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 13px;
+            line-height: 1.6;
+            margin-top: 15px;
+        }
+        
+        .logs::-webkit-scrollbar {
+            width: 10px;
+        }
+        
+        .logs::-webkit-scrollbar-track {
+            background: #2a2a2a;
+        }
+        
+        .logs::-webkit-scrollbar-thumb {
+            background: #555;
+            border-radius: 5px;
+        }
+        
+        .results {
+            margin-top: 20px;
+        }
+        
+        .result-item {
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 5px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .result-item.success {
+            background: #d4edda;
+            border-left: 4px solid #28a745;
+        }
+        
+        .result-item.failed {
+            background: #f8d7da;
+            border-left: 4px solid #dc3545;
+        }
+        
+        .emoji {
+            font-size: 1.5em;
+        }
+        
+        .spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s ease-in-out infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .footer {
+            padding: 20px;
+            text-align: center;
+            color: #666;
+            font-size: 0.9em;
+            border-top: 1px solid #e0e0e0;
+        }
+        
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 1.8em;
+            }
+            
+            .button-group {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎵 YouTube Auto Downloader</h1>
+            <p>Download audio and thumbnails from YouTube automatically</p>
+        </div>
+        
+        <div class="content">
+            <div class="input-section">
+                <label for="songs">📝 Enter Your Song List:</label>
+                
+                <div class="example">
+                    <h4>📋 Example Format:</h4>
+                    <code>1. Shape of You<br>2. Blinding Lights<br>3. Levitating<br>4. Stay<br>5. Heat Waves</code>
+                </div>
+                
+                <textarea 
+                    id="songs" 
+                    placeholder="Paste your numbered song list here...&#10;&#10;1. First Song Name&#10;2. Second Song Name&#10;3. Third Song Name&#10;...and so on"
+                ></textarea>
+                
+                <div class="button-group">
+                    <button class="btn-primary" id="startBtn" onclick="startProcessing()">
+                        🚀 Start Download
+                    </button>
+                    <button class="btn-secondary" id="resetBtn" onclick="resetForm()" disabled>
+                        🔄 Reset
+                    </button>
+                </div>
+            </div>
+            
+            <div class="progress-section" id="progressSection">
+                <div class="status" id="status">🔄 Processing...</div>
+                <div class="progress-bar-container">
+                    <div class="progress-bar" id="progressBar" style="width: 0%;">
+                        <span id="progressText">0%</span>
+                    </div>
+                </div>
+                <div id="currentSong" style="text-align: center; margin: 10px 0; font-weight: 600;"></div>
+                
+                <div class="logs" id="logs"></div>
+                
+                <div class="results" id="results"></div>
+            </div>
+        </div>
+        
+        <div class="footer">
+            <p>Powered by yt-dlp, Selenium & Flask | Optimized for Render.com</p>
+        </div>
+    </div>
+    
+    <script>
+        let progressInterval = null;
+        
+        async function startProcessing() {
+            const songs = document.getElementById('songs').value.trim();
+            
+            if (!songs) {
+                alert('⚠️ Please enter at least one song!');
+                return;
+            }
+            
+            // Disable start button, enable reset
+            document.getElementById('startBtn').disabled = true;
+            document.getElementById('resetBtn').disabled = false;
+            document.getElementById('songs').disabled = true;
+            
+            // Show progress section
+            document.getElementById('progressSection').classList.add('active');
+            
+            try {
+                const response = await fetch('/api/process', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ songs: songs })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    // Start polling for progress
+                    progressInterval = setInterval(updateProgress, 1000);
+                } else {
+                    alert('❌ Error: ' + data.message);
+                    resetForm();
+                }
+            } catch (error) {
+                alert('❌ Error: ' + error.message);
+                resetForm();
+            }
+        }
+        
+        async function updateProgress() {
+            try {
+                const response = await fetch('/api/progress');
+                const data = await response.json();
+                
+                // Update status
+                const statusEmoji = {
+                    'idle': '⏸️',
+                    'processing': '🔄',
+                    'completed': '✅',
+                    'error': '❌'
+                };
+                
+                document.getElementById('status').textContent = 
+                    statusEmoji[data.status] + ' ' + data.status.toUpperCase();
+                
+                // Update progress bar
+                if (data.total > 0) {
+                    const percentage = Math.round((data.progress / data.total) * 100);
+                    document.getElementById('progressBar').style.width = percentage + '%';
+                    document.getElementById('progressText').textContent = percentage + '%';
+                }
+                
+                // Update current song
+                if (data.current_song) {
+                    document.getElementById('currentSong').textContent = 
+                        '🎵 Current: ' + data.current_song;
+                }
+                
+                // Update logs
+                const logsDiv = document.getElementById('logs');
+                logsDiv.innerHTML = data.logs.join('<br>');
+                logsDiv.scrollTop = logsDiv.scrollHeight;
+                
+                // Update results
+                if (data.results.length > 0) {
+                    const resultsDiv = document.getElementById('results');
+                    resultsDiv.innerHTML = '<h4 style="margin-bottom: 10px;">📊 Results:</h4>';
+                    
+                    data.results.forEach(result => {
+                        const itemDiv = document.createElement('div');
+                        itemDiv.className = 'result-item ' + 
+                            (result.status === 'found' ? 'success' : 'failed');
+                        
+                        const emoji = result.status === 'found' ? '✅' : '❌';
+                        itemDiv.innerHTML = `
+                            <span class="emoji">${emoji}</span>
+                            <span>${result.song}</span>
+                        `;
+                        resultsDiv.appendChild(itemDiv);
+                    });
+                }
+                
+                // Stop polling if completed or error
+                if (data.status === 'completed' || data.status === 'error') {
+                    clearInterval(progressInterval);
+                    document.getElementById('resetBtn').textContent = '✨ Start New';
+                }
+                
+            } catch (error) {
+                console.error('Error updating progress:', error);
+            }
+        }
+        
+        async function resetForm() {
+            // Stop polling
+            if (progressInterval) {
+                clearInterval(progressInterval);
+            }
+            
+            // Reset server state
+            try {
+                await fetch('/api/reset', { method: 'POST' });
+            } catch (error) {
+                console.error('Error resetting:', error);
+            }
+            
+            // Reset UI
+            document.getElementById('songs').value = '';
+            document.getElementById('songs').disabled = false;
+            document.getElementById('startBtn').disabled = false;
+            document.getElementById('resetBtn').disabled = true;
+            document.getElementById('resetBtn').textContent = '🔄 Reset';
+            document.getElementById('progressSection').classList.remove('active');
+            document.getElementById('progressBar').style.width = '0%';
+            document.getElementById('progressText').textContent = '0%';
+            document.getElementById('logs').innerHTML = '';
+            document.getElementById('results').innerHTML = '';
+            document.getElementById('currentSong').textContent = '';
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,24 @@
+{
+  "name": "yt-final",
+  "version": "1.0.0",
+  "description": "A powerful YouTube video and audio downloader web application built with Flask and yt-dlp.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SandeshBro-ux/freeytzone.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/SandeshBro-ux/freeytzone/issues"
+  },
+  "homepage": "https://github.com/SandeshBro-ux/freeytzone#readme",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.57.4"
+  }
+}

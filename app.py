@@ -10,6 +10,7 @@ import shutil
 from http.cookiejar import MozillaCookieJar
 from flask import Flask, render_template, request, jsonify, send_from_directory, send_file
 from googleapiclient.discovery import build
+from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from io import BytesIO
 from PIL import Image, ImageDraw
@@ -47,7 +48,16 @@ app.config['DOWNLOAD_FOLDER'] = 'downloads'
 app.secret_key = os.urandom(24)
 
 # Configure logging
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(
+    level=logging.INFO, 
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout),  # Log to console
+        logging.FileHandler('app.log', mode='a')  # Also log to file
+    ]
+)
+# Ensure Flask's logger uses the same configuration
+app.logger.setLevel(logging.INFO)
 # Suppress overly verbose logs from libraries if needed
 logging.getLogger("urllib3").setLevel(logging.WARNING)
 logging.getLogger("googleapiclient.discovery_cache").setLevel(logging.ERROR)
@@ -187,6 +197,113 @@ def extract_video_id(url):
     
     return video_id, is_shorts
 
+def get_youtube_quality_from_web(video_id):
+    """
+    Scrape YouTube webpage to detect actual available video qualities.
+    This is more reliable when yt-dlp is blocked by YouTube's bot detection.
+    """
+    url = f"https://www.youtube.com/watch?v={video_id}"
+    
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.5',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'DNT': '1',
+        'Connection': 'keep-alive',
+        'Upgrade-Insecure-Requests': '1',
+    }
+    
+    try:
+        app.logger.info(f"Attempting web scraping for video {video_id}...")
+        response = requests.get(url, headers=headers, timeout=15)
+        response.raise_for_status()
+        html_content = response.text
+        
+        # Extract from ytInitialPlayerResponse
+        player_response_pattern = r'var ytInitialPlayerResponse = ({.*?});'
+        match = re.search(player_response_pattern, html_content)
+        
+        if match:
+            try:
+                player_data = json.loads(match.group(1))
+                streaming_data = player_data.get('streamingData', {})
+                
+                # Check adaptive formats (separate video and audio streams)
+                adaptive_formats = streaming_data.get('adaptiveFormats', [])
+                formats = streaming_data.get('formats', [])
+                
+                available_heights = set()
+                
+                # Process adaptive formats (usually higher quality)
+                for fmt in adaptive_formats:
+                    if fmt.get('mimeType', '').startswith('video/') and 'height' in fmt:
+                        height = fmt['height']
+                        available_heights.add(height)
+                        app.logger.info(f"Web scraping found adaptive format: {height}p - {fmt.get('qualityLabel', '?')}")
+                
+                # Process regular formats
+                for fmt in formats:
+                    if 'height' in fmt:
+                        height = fmt['height']
+                        available_heights.add(height)
+                        app.logger.info(f"Web scraping found regular format: {height}p - {fmt.get('qualityLabel', '?')}")
+                
+                if available_heights:
+                    max_height = max(available_heights)
+                    sorted_heights = sorted(available_heights, reverse=True)
+                    app.logger.info(f"Web scraping SUCCESS: Available resolutions for {video_id}: {sorted_heights}")
+                    return max_height, sorted_heights
+                    
+            except json.JSONDecodeError as e:
+                app.logger.warning(f"Could not parse player response JSON: {e}")
+        
+        # Fallback: Look for quality mentions in page content
+        quality_patterns = [
+            r'"qualityLabel":"([^"]*4K[^"]*)",',
+            r'"qualityLabel":"([^"]*2160p[^"]*)",', 
+            r'"qualityLabel":"([^"]*1440p[^"]*)",',
+            r'"qualityLabel":"([^"]*1080p[^"]*)",',
+            r'"qualityLabel":"([^"]*720p[^"]*)",'
+        ]
+        
+        found_qualities = set()
+        for pattern in quality_patterns:
+            matches = re.findall(pattern, html_content, re.IGNORECASE)
+            for match in matches:
+                found_qualities.add(match)
+                app.logger.info(f"Found quality label: {match}")
+        
+        if found_qualities:
+            # Parse height from quality labels
+            heights = set()
+            for quality in found_qualities:
+                if '4K' in quality or '2160p' in quality:
+                    heights.add(2160)
+                elif '1440p' in quality:
+                    heights.add(1440)
+                elif '1080p' in quality:
+                    heights.add(1080)
+                elif '720p' in quality:
+                    heights.add(720)
+                elif '480p' in quality:
+                    heights.add(480)
+                elif '360p' in quality:
+                    heights.add(360)
+            
+            if heights:
+                max_height = max(heights)
+                sorted_heights = sorted(heights, reverse=True)
+                app.logger.info(f"Web scraping extracted heights from quality labels: {sorted_heights}")
+                return max_height, sorted_heights
+        
+        app.logger.warning(f"Web scraping found no quality information for {video_id}")
+        return None, []
+        
+    except Exception as e:
+        app.logger.error(f"Error scraping YouTube page for {video_id}: {e}")
+        return None, []
+
 def process_cookie_string(cookies_content_str):
     """
     Process cookie string to ensure it's properly formatted for Netscape format.
@@ -304,12 +421,34 @@ def fetch_info():
         return jsonify({'error': 'Invalid YouTube URL'}), 400
 
     temp_ydl_opts_for_info = {
-        'quiet': True,
-            'no_warnings': True,
+        'quiet': False,  # Keep logging for debugging
+        'no_warnings': False,
         'simulate': True,
-        'extract_flat': True,
-        'force_generic_extractor': True,
-            'skip_download': True,
+        'extract_flat': False,
+        'skip_download': True,
+        'format': 'best',
+        'ignoreerrors': True,
+        'no_check_certificate': True,
+        # Enhanced YouTube extractor arguments to bypass restrictions
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['android', 'web'],  # Use Android and Web clients
+                'player_skip': ['webpage'],  # Skip webpage extraction
+                'include_hls_manifest': [False],  # Disable HLS for faster extraction
+                'get_comments': [False]  # Disable comments for faster extraction
+            }
+        },
+        # Better user agent to avoid detection
+        'user_agent': 'Mozilla/5.0 (Linux; Android 13; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Mobile Safari/537.36',
+        # HTTP headers to appear more like a real browser
+        'http_headers': {
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'en-us,en;q=0.5',
+            'Accept-Encoding': 'gzip, deflate',
+            'DNT': '1',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1',
+        }
     }
 
     if EFFECTIVE_YTDLP_PROXY_URL:
@@ -354,39 +493,156 @@ def fetch_info():
         channel_snippet = channel_response['items'][0]['snippet']
         channel_statistics = channel_response['items'][0]['statistics']
         
-        # Get available formats and determine max quality
+        # Get available formats for logging purposes
         available_formats = info_dict.get('formats', [])
-        max_height = 0
-        for format_info in available_formats:
-            height = format_info.get('height')
-            if height and height > max_height:
-                max_height = height
+        app.logger.info(f"yt-dlp returned {len(available_formats)} total formats for {video_id}")
         
-        # Convert max height to quality string
+        # Analyze video formats for backup/logging
+        video_formats = []
+        for i, format_info in enumerate(available_formats):
+            format_id = format_info.get('format_id', 'unknown')
+            vcodec = format_info.get('vcodec', 'none')
+            height = format_info.get('height')
+            
+            if vcodec != 'none' and height and height > 0:
+                video_formats.append({
+                    'height': height,
+                    'format_id': format_id,
+                    'ext': format_info.get('ext', 'unknown')
+                })
+        
+        video_formats.sort(key=lambda x: x['height'], reverse=True)
+        if video_formats:
+            app.logger.info(f"yt-dlp video formats (backup): {[(f['height'], f['format_id']) for f in video_formats[:3]]}")
+        else:
+            app.logger.info(f"yt-dlp returned no usable video formats for {video_id}")
+        
+        # CRITICAL FIX: Always try web scraping FIRST since it's more reliable than yt-dlp
+        app.logger.info(f"🔍 Starting web scraping quality detection for {video_id} (primary method)...")
+        web_max_height, web_available_heights = get_youtube_quality_from_web(video_id)
+        
+        if web_max_height and web_available_heights:
+            max_height = web_max_height
+            available_heights = web_available_heights
+            app.logger.info(f"✅ Web scraping SUCCESS: Max quality {max_height}p, available: {available_heights}")
+        else:
+            app.logger.warning(f"⚠️ Web scraping failed, trying yt-dlp formats as backup...")
+            
+            # Backup: Try yt-dlp formats
+            max_height = 0
+            if video_formats:
+                max_height = video_formats[0]['height']
+                available_heights = sorted(list(set([f['height'] for f in video_formats])), reverse=True)
+                app.logger.info(f"yt-dlp backup: Max quality {max_height}p, available: {available_heights}")
+            else:
+                app.logger.warning(f"Both web scraping and yt-dlp failed, using API fallback...")
+                # Final fallback: Use YouTube API and video metadata to infer quality
+                video_title = video_snippet.get('title', '').lower()
+                video_definition = video_snippet.get('definition', '')
+                
+                # Smart quality inference based on title keywords and other factors
+                if '8k' in video_title or '4320p' in video_title:
+                    max_height = 2160  # Cap at 4K for practical purposes
+                    app.logger.info(f"Title suggests 8K/4320p, using 4K (2160p) as max quality")
+                elif '4k' in video_title or '2160p' in video_title or 'ultra hd' in video_title or 'uhd' in video_title:
+                    max_height = 2160
+                    app.logger.info(f"Title suggests 4K/2160p quality")
+                elif '2k' in video_title or '1440p' in video_title or 'qhd' in video_title:
+                    max_height = 1440
+                    app.logger.info(f"Title suggests 2K/1440p quality")
+                elif '1080p' in video_title or 'full hd' in video_title or 'fhd' in video_title:
+                    max_height = 1080
+                    app.logger.info(f"Title suggests 1080p Full HD quality")
+                elif video_definition == 'hd':
+                    # Most HD videos on YouTube are at least 1080p nowadays
+                    max_height = 1080
+                    app.logger.info(f"Using API fallback: HD definition suggests 1080p quality")
+                else:
+                    max_height = 720  # Conservative fallback
+                    app.logger.info(f"Using API fallback: Conservative 720p quality assumption")
+                
+                available_heights = []
+        
+        # If no video formats detected but we have API data, make smart assumptions
+        if not available_heights and max_height > 0:
+            # Generate realistic quality options based on detected max height
+            if max_height >= 2160:  # 4K
+                available_heights = [2160, 1440, 1080, 720, 480, 360]
+            elif max_height >= 1440:  # 2K
+                available_heights = [1440, 1080, 720, 480, 360]
+            elif max_height >= 1080:  # 1080p
+                available_heights = [1080, 720, 480, 360]
+            elif max_height >= 720:  # 720p
+                available_heights = [720, 480, 360]
+            else:
+                available_heights = [480, 360]
+            app.logger.info(f"Generated fallback heights based on max_height {max_height}: {available_heights}")
+        
+        app.logger.info(f"Available heights for {video_id}: {available_heights}")
+        
+        # Convert max height to quality string and determine available qualities more accurately
+        available_qualities = []
+        
+        app.logger.info(f"Starting quality analysis for max_height: {max_height}")
+        
+        # Build available qualities based on what's actually available
+        for height in available_heights:
+            app.logger.info(f"Processing height: {height}")
+            if height >= 4320:
+                if '8K' not in available_qualities:
+                    available_qualities.append('8K')
+                    app.logger.info("Added 8K quality")
+            elif height >= 2160:
+                if '4K' not in available_qualities:
+                    available_qualities.append('4K')
+                    app.logger.info("Added 4K quality")
+            elif height >= 1440:
+                if '2K' not in available_qualities:
+                    available_qualities.append('2K')
+                    app.logger.info("Added 2K quality")
+            elif height >= 1080:
+                if '1080p' not in available_qualities:
+                    available_qualities.append('1080p')
+                    app.logger.info("Added 1080p quality")
+            elif height >= 720:
+                if '720p' not in available_qualities:
+                    available_qualities.append('720p')
+                    app.logger.info("Added 720p quality")
+            elif height >= 480:
+                if '480p' not in available_qualities:
+                    available_qualities.append('480p')
+                    app.logger.info("Added 480p quality")
+            elif height >= 360:
+                if '360p' not in available_qualities:
+                    available_qualities.append('360p')
+                    app.logger.info("Added 360p quality")
+        
+        # Ensure we always have at least 360p available
+        if not available_qualities:
+            available_qualities = ['360p']
+            app.logger.warning("No qualities detected, defaulting to 360p")
+        
+        app.logger.info(f"Final available qualities for {video_id}: {available_qualities}")
+        
+        # Determine max quality string
         if max_height >= 4320:
-            max_quality = '8K'
-            available_qualities = ['2K', '1080p', '720p', '480p', '360p']
+            max_quality = '8K (4320p)'
         elif max_height >= 2160:
-            max_quality = '4K'
-            available_qualities = ['2K', '1080p', '720p', '480p', '360p']
+            max_quality = '4K (2160p)'
         elif max_height >= 1440:
-            max_quality = '2K'
-            available_qualities = ['2K', '1080p', '720p', '480p', '360p']
+            max_quality = '2K (1440p)'
         elif max_height >= 1080:
-            max_quality = '1080p'
-            available_qualities = ['1080p', '720p', '480p', '360p']
+            max_quality = '1080p (Full HD)'
         elif max_height >= 720:
-            max_quality = '720p'
-            available_qualities = ['720p', '480p', '360p']
+            max_quality = '720p (HD)'
         elif max_height >= 480:
             max_quality = '480p'
-            available_qualities = ['480p', '360p']
         elif max_height > 0:
             max_quality = f'{max_height}p'
-            available_qualities = [f'{max_height}p', '360p']
         else:
-            max_quality = '360p'  # Default
-            available_qualities = ['360p']
+            max_quality = '360p (Default)'  # Default
+            
+        app.logger.info(f"Final max quality determined for {video_id}: {max_quality}")
 
         # Parse duration from ISO 8601 format
         duration_iso = video_content_details.get('duration', 'PT0M0S')
@@ -419,41 +675,97 @@ def fetch_info():
 
     except Exception as e:
         app.logger.error(f"Error fetching extended details from YouTube API: {str(e)}")
-        # Fallback to just yt-dlp info if API fails
+        # Fallback when API fails - try web scraping first, then yt-dlp
         
-        # Try to determine max quality from formats
-        formats = info_dict.get('formats', [])
-        max_height = 0
-        for format_info in formats:
-            height = format_info.get('height')
-            if height and height > max_height:
-                max_height = height
+        app.logger.info(f"🔍 Fallback: Trying web scraping for {video_id}...")
+        web_max_height, web_available_heights = get_youtube_quality_from_web(video_id)
         
-        # Convert max height to quality string
+        if web_max_height and web_available_heights:
+            max_height = web_max_height
+            available_heights = web_available_heights
+            app.logger.info(f"✅ Web scraping SUCCESS in fallback: Max quality {max_height}p, available: {available_heights}")
+        else:
+            app.logger.warning(f"Web scraping failed in fallback, trying yt-dlp formats...")
+            
+            # Try to determine max quality from yt-dlp formats as last resort
+            formats = info_dict.get('formats', [])
+            
+            # Analyze available video formats
+            video_formats = []
+            for format_info in formats:
+                if format_info.get('vcodec') != 'none' and format_info.get('height'):
+                    video_formats.append({
+                        'height': format_info.get('height'),
+                        'width': format_info.get('width'),
+                        'format_id': format_info.get('format_id'),
+                        'ext': format_info.get('ext'),
+                        'fps': format_info.get('fps'),
+                        'vbr': format_info.get('vbr', 0)
+                    })
+            
+            # Sort by height to find the maximum available quality
+            video_formats.sort(key=lambda x: x['height'], reverse=True)
+            
+            max_height = 0
+            available_heights = []
+            
+            if video_formats:
+                max_height = video_formats[0]['height']
+                available_heights = sorted(list(set([f['height'] for f in video_formats])), reverse=True)
+                app.logger.info(f"Fallback yt-dlp: Available video formats for {video_id}: {[f"{f['height']}p" for f in video_formats[:5]]}")
+            else:
+                app.logger.warning(f"All methods failed for {video_id}, using conservative defaults")
+                max_height = 720  # Conservative default
+                available_heights = [720, 480, 360]
+        
+        # Convert max height to quality string and determine available qualities more accurately
+        available_qualities = []
+        
+        # Build available qualities based on what's actually available
+        for height in available_heights:
+            if height >= 4320:
+                if '8K' not in available_qualities:
+                    available_qualities.append('8K')
+            elif height >= 2160:
+                if '4K' not in available_qualities:
+                    available_qualities.append('4K')
+            elif height >= 1440:
+                if '2K' not in available_qualities:
+                    available_qualities.append('2K')
+            elif height >= 1080:
+                if '1080p' not in available_qualities:
+                    available_qualities.append('1080p')
+            elif height >= 720:
+                if '720p' not in available_qualities:
+                    available_qualities.append('720p')
+            elif height >= 480:
+                if '480p' not in available_qualities:
+                    available_qualities.append('480p')
+            elif height >= 360:
+                if '360p' not in available_qualities:
+                    available_qualities.append('360p')
+        
+        # Ensure we always have at least 360p available
+        if not available_qualities:
+            available_qualities = ['360p']
+        
+        # Determine max quality string
         if max_height >= 4320:
-            max_quality = '8K'
-            available_qualities = ['2K', '1080p', '720p', '480p', '360p']
+            max_quality = '8K (4320p)'
         elif max_height >= 2160:
-            max_quality = '4K'
-            available_qualities = ['2K', '1080p', '720p', '480p', '360p']
+            max_quality = '4K (2160p)'
         elif max_height >= 1440:
-            max_quality = '2K'
-            available_qualities = ['2K', '1080p', '720p', '480p', '360p']
+            max_quality = '2K (1440p)'
         elif max_height >= 1080:
-            max_quality = '1080p'
-            available_qualities = ['1080p', '720p', '480p', '360p']
+            max_quality = '1080p (Full HD)'
         elif max_height >= 720:
-            max_quality = '720p'
-            available_qualities = ['720p', '480p', '360p']
+            max_quality = '720p (HD)'
         elif max_height >= 480:
             max_quality = '480p'
-            available_qualities = ['480p', '360p']
         elif max_height > 0:
             max_quality = f'{max_height}p'
-            available_qualities = [f'{max_height}p', '360p']
         else:
             max_quality = '360p'  # Default
-            available_qualities = ['360p']
 
         fallback_info = {
             'id': video_id,
@@ -513,86 +825,206 @@ def download_video():
     # Use a temporary directory for intermediate files
     with tempfile.TemporaryDirectory() as temp_dir:
         try:
+            # Enhanced yt-dlp base command with YouTube extractor arguments
             yt_dlp_base_cmd = [sys.executable, '-m', 'yt_dlp']
 
+            # Add enhanced YouTube extractor arguments to bypass restrictions
+            yt_dlp_base_cmd.extend([
+                '--extractor-args', 'youtube:player_client=android,web;player_skip=webpage;include_hls_manifest=false'
+            ])
+            
             # Add common yt-dlp options
             if user_agent:
                 yt_dlp_base_cmd.extend(['--user-agent', user_agent])
+            else:
+                # Use Android user agent for better compatibility
+                yt_dlp_base_cmd.extend(['--user-agent', 'Mozilla/5.0 (Linux; Android 13; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Mobile Safari/537.36'])
+                
             if cookie_file_path:
                 yt_dlp_base_cmd.extend(['--cookies', cookie_file_path])
             if EFFECTIVE_YTDLP_PROXY_URL:
                 yt_dlp_base_cmd.extend(['--proxy', EFFECTIVE_YTDLP_PROXY_URL])
 
             app.logger.info(f"Checking quality for MP3 download: {quality}")
-            # --- Applying the working MP3 logic from mp3_test.py ---
+            # --- Enhanced MP3 logic with better error handling ---
             if quality == 'mp3':
-                app.logger.info("--- 🚀 Downloading and Converting MP3 ---")
+                app.logger.info("--- 🚀 Starting MP3 Download Process ---")
                 
-                # Step 1: Get the direct download URL for the best audio stream
-                app.logger.info("Step 1/3: Getting direct audio URL from yt-dlp...")
-                get_url_opts = yt_dlp_base_cmd + [
-                    '-f', 'bestaudio',
-                    '--get-url',
-                    url
-                ]
-                process_get_url = subprocess.run(get_url_opts, check=True, capture_output=True, text=True, encoding='utf-8')
-                audio_url = process_get_url.stdout.strip()
-                if not audio_url.startswith('http'):
-                    raise Exception(f"Failed to get a valid audio URL. yt-dlp output: {audio_url}")
-                app.logger.info(f"✅ Got audio URL: {audio_url[:70]}...")
-
-                # Step 2: Download the audio from the URL using requests
-                app.logger.info("Step 2/3: Downloading audio stream using Python requests...")
-                temp_audio_filepath = os.path.join(temp_dir, 'downloaded_audio_stream') # Use a generic name, we don't know the extension
-                
-                # Pass the user's User-Agent to requests to avoid being throttled
-                headers = {'User-Agent': user_agent} if user_agent else {}
-                with requests.get(audio_url, stream=True, headers=headers) as r:
-                    r.raise_for_status()
-                    with open(temp_audio_filepath, 'wb') as f:
-                        for chunk in r.iter_content(chunk_size=8192):
-                            f.write(chunk)
-                
-                if not os.path.exists(temp_audio_filepath) or os.path.getsize(temp_audio_filepath) == 0:
-                    raise Exception("Failed to download audio file or the file is empty.")
-                app.logger.info(f"✅ Temporary audio stream downloaded to: {temp_audio_filepath}")
-
-                # Step 3: Use FFmpeg to convert the temporary audio file to MP3
                 try:
-                    # Get video title for the final filename from yt-dlp's info_dict
-                    ydl_info = yt_dlp.YoutubeDL({'quiet': True, 'skip_download': True, 'simulate': True}).extract_info(url, download=False)
-                    title = ydl_info.get('title', 'audio')
-                    app.logger.info(f"Extracted title for MP3 filename: {title}")
-                except Exception as info_e:
-                    app.logger.warning(f"Could not get video title for MP3 filename: {info_e}. Using 'audio'.")
-                    title = 'audio'
+                    # Step 1: Get the direct download URL for the best audio stream
+                    app.logger.info("Step 1/3: Getting direct audio URL from yt-dlp...")
+                    
+                    # Try the most effective audio format strategies with enhanced extractor args
+                    audio_format_strategies = [
+                        'bestaudio',              # Generic best audio (most compatible)
+                        'best[height<=480]/best', # Get best video with audio, limit to 480p for faster processing
+                        'worstaudio',             # Sometimes works when best doesn't
+                        'best'                    # Last resort - any format with audio
+                    ]
+                    
+                    audio_url = None
+                    successful_format = None
+                    
+                    for audio_format in audio_format_strategies:
+                        app.logger.info(f"Trying audio format: {audio_format}")
+                        
+                        get_url_opts = yt_dlp_base_cmd + [
+                            '-f', audio_format,
+                            '--get-url',
+                            '--no-warnings',
+                            '--ignore-errors',           # Continue on download errors
+                            '--no-check-certificate',    # Skip SSL certificate verification
+                            '--prefer-insecure',         # Prefer insecure connections if needed
+                            url
+                        ]
+                        
+                        app.logger.info(f"Running command: {' '.join(get_url_opts)}")
+                        process_get_url = subprocess.run(get_url_opts, capture_output=True, text=True, encoding='utf-8', timeout=30)
+                        
+                        app.logger.info(f"yt-dlp exit code: {process_get_url.returncode}")
+                        if process_get_url.returncode == 0:
+                            audio_url = process_get_url.stdout.strip()
+                            if audio_url.startswith('http'):
+                                successful_format = audio_format
+                                app.logger.info(f"✅ Success with format '{audio_format}': {audio_url[:100]}...")
+                                break
+                            else:
+                                app.logger.warning(f"Invalid URL with format '{audio_format}': {audio_url}")
+                        else:
+                            app.logger.warning(f"Failed with format '{audio_format}': {process_get_url.stderr}")
+                    
+                    if not audio_url or not audio_url.startswith('http'):
+                        # All format strategies failed - likely YouTube blocking
+                        app.logger.error("All audio format strategies failed")
+                        app.logger.error(f"Last yt-dlp STDERR: {process_get_url.stderr}")
+                        
+                        stderr_str = str(process_get_url.stderr).lower() if process_get_url.stderr else ""
+                        if "signature extraction failed" in stderr_str or "precondition check failed" in stderr_str:
+                            return jsonify({
+                                'error': 'YouTube is blocking audio downloads due to bot detection. To download audio from this video, please provide cookies from an active YouTube session using the cookies field above.'
+                            }), 403
+                        elif "requested format is not available" in stderr_str or "only images are available" in stderr_str:
+                            return jsonify({
+                                'error': 'Audio download not available for this video. YouTube is restricting access - try providing cookies from an active YouTube session, or this video may not have downloadable audio tracks.'
+                            }), 404
+                        else:
+                            return jsonify({
+                                'error': f'Failed to get audio URL from YouTube. This video may be restricted. Try providing cookies or contact support. Technical details: {process_get_url.stderr}'
+                            }), 500
 
-                safe_title = "".join(c for c in title if c.isalnum() or c in (' ', '_', '-')).rstrip()
-                final_output_mp3_path = os.path.join(download_dir, f"{safe_title}.mp3")
-                app.logger.info(f"Step 3/3: Converting to MP3 using FFmpeg. Final path: {final_output_mp3_path}")
+                    # Step 2: Download the audio from the URL using requests
+                    app.logger.info("Step 2/3: Downloading audio stream using Python requests...")
+                    temp_audio_filepath = os.path.join(temp_dir, 'downloaded_audio_stream')
+                    
+                    # Pass the user's User-Agent to requests to avoid being throttled
+                    headers = {
+                        'User-Agent': user_agent if user_agent else 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                    }
+                    
+                    app.logger.info(f"Downloading from URL with headers: {headers}")
+                    with requests.get(audio_url, stream=True, headers=headers, timeout=60) as r:
+                        r.raise_for_status()
+                        app.logger.info(f"HTTP response status: {r.status_code}")
+                        app.logger.info(f"Content-Type: {r.headers.get('Content-Type')}")
+                        app.logger.info(f"Content-Length: {r.headers.get('Content-Length')}")
+                        
+                        with open(temp_audio_filepath, 'wb') as f:
+                            downloaded_bytes = 0
+                            for chunk in r.iter_content(chunk_size=8192):
+                                f.write(chunk)
+                                downloaded_bytes += len(chunk)
+                            app.logger.info(f"Downloaded {downloaded_bytes} bytes")
+                    
+                    if not os.path.exists(temp_audio_filepath) or os.path.getsize(temp_audio_filepath) == 0:
+                        raise Exception("Failed to download audio file or the file is empty.")
+                    
+                    file_size = os.path.getsize(temp_audio_filepath)
+                    app.logger.info(f"✅ Temporary audio stream downloaded to: {temp_audio_filepath} (Size: {file_size} bytes)")
 
-                ffmpeg_convert_opts = [
-                    ffmpeg_path,
-                    '-i', temp_audio_filepath, # Input the temporary downloaded audio
-                    '-vn',                # No video (ensure only audio is processed)
-                    '-c:a', 'libmp3lame', # Use libmp3lame for MP3 encoding (ensure it's installed/available with ffmpeg)
-                    '-b:a', '192k',       # Set high-quality audio bitrate
-                    '-y',                 # Overwrite output file without asking
-                    final_output_mp3_path
-                ]
-                process_ffmpeg_convert = subprocess.run(ffmpeg_convert_opts, check=True, capture_output=True, text=True)
-                app.logger.info(f"FFmpeg MP3 conversion STDOUT: \n{process_ffmpeg_convert.stdout}")
-                app.logger.error(f"FFmpeg MP3 conversion STDERR: \n{process_ffmpeg_convert.stderr}")
+                    # Step 3: Use FFmpeg to convert the temporary audio file to MP3
+                    app.logger.info("Step 3/3: Converting to MP3 using FFmpeg...")
+                    
+                    # Get video title for the final filename
+                    try:
+                        ydl_info = yt_dlp.YoutubeDL({'quiet': True, 'skip_download': True, 'simulate': True}).extract_info(url, download=False)
+                        title = ydl_info.get('title', 'audio')
+                        app.logger.info(f"Extracted title for MP3 filename: {title}")
+                    except Exception as info_e:
+                        app.logger.warning(f"Could not get video title for MP3 filename: {info_e}. Using 'audio'.")
+                        title = 'audio'
 
-                final_filename = os.path.basename(final_output_mp3_path)
-                app.logger.info(f"✅✅✅ MP3 Download and Conversion complete! ✅✅✅")
-                app.logger.info(f"Final MP3 file saved to: {final_filename}")
+                    safe_title = "".join(c for c in title if c.isalnum() or c in (' ', '_', '-')).rstrip()
+                    if not safe_title:  # Fallback if title is empty after sanitization
+                        safe_title = f"audio_{video_id}"
+                    
+                    final_output_mp3_path = os.path.join(download_dir, f"{safe_title}.mp3")
+                    app.logger.info(f"Final MP3 path: {final_output_mp3_path}")
 
-                return jsonify({
-                    'success': True,
-                    'filename': final_filename,
-                    'download_url': f"/downloads/{final_filename}"
-                })
+                    ffmpeg_convert_opts = [
+                        ffmpeg_path,
+                        '-i', temp_audio_filepath,
+                        '-vn',
+                        '-c:a', 'libmp3lame',
+                        '-b:a', '192k',
+                        '-y',
+                        final_output_mp3_path
+                    ]
+                    
+                    app.logger.info(f"Running FFmpeg command: {' '.join(ffmpeg_convert_opts)}")
+                    process_ffmpeg_convert = subprocess.run(ffmpeg_convert_opts, capture_output=True, text=True, timeout=120)
+                    
+                    app.logger.info(f"FFmpeg exit code: {process_ffmpeg_convert.returncode}")
+                    app.logger.info(f"FFmpeg STDOUT: {process_ffmpeg_convert.stdout}")
+                    app.logger.info(f"FFmpeg STDERR: {process_ffmpeg_convert.stderr}")
+                    
+                    if process_ffmpeg_convert.returncode != 0:
+                        raise subprocess.CalledProcessError(process_ffmpeg_convert.returncode, ffmpeg_convert_opts, process_ffmpeg_convert.stdout, process_ffmpeg_convert.stderr)
+                    
+                    if not os.path.exists(final_output_mp3_path) or os.path.getsize(final_output_mp3_path) == 0:
+                        raise Exception(f"FFmpeg conversion failed - output file missing or empty: {final_output_mp3_path}")
+                    
+                    final_file_size = os.path.getsize(final_output_mp3_path)
+                    final_filename = os.path.basename(final_output_mp3_path)
+                    
+                    app.logger.info(f"✅✅✅ MP3 Download and Conversion complete! ✅✅✅")
+                    app.logger.info(f"Final MP3 file: {final_filename} (Size: {final_file_size} bytes)")
+
+                    return jsonify({
+                        'success': True,
+                        'filename': final_filename,
+                        'download_url': f"/downloads/{final_filename}"
+                    })
+                    
+                except subprocess.CalledProcessError as e:
+                    app.logger.error(f"Subprocess failed during MP3 download:")
+                    app.logger.error(f"Command: {e.cmd}")
+                    app.logger.error(f"Exit code: {e.returncode}")
+                    app.logger.error(f"STDOUT: {e.stdout}")
+                    app.logger.error(f"STDERR: {e.stderr}")
+                    
+                    # Check for specific yt-dlp errors
+                    stderr_str = str(e.stderr).lower() if e.stderr else ""
+                    stdout_str = str(e.stdout).lower() if e.stdout else ""
+                    
+                    if "signature extraction failed" in stderr_str or "precondition check failed" in stderr_str:
+                        return jsonify({'error': 'YouTube is blocking audio downloads. This is likely due to bot detection. Please try providing cookies from an active YouTube session.'}), 403
+                    elif "video unavailable" in stderr_str or "private video" in stderr_str:
+                        return jsonify({'error': 'Audio download failed: Video is unavailable or private.'}), 404
+                    elif "http error 429" in stderr_str or "too many requests" in stderr_str:
+                        return jsonify({'error': 'Audio download failed: YouTube is rate-limiting requests. Please try again later.'}), 429
+                    else:
+                        return jsonify({'error': f'Audio download failed. Error details: {e.stderr}'}), 500
+                        
+                except requests.exceptions.RequestException as e:
+                    app.logger.error(f"HTTP request failed during MP3 download: {e}")
+                    return jsonify({'error': f'Audio download failed during HTTP request: {str(e)}'}), 500
+                    
+                except Exception as e:
+                    app.logger.error(f"Unexpected error during MP3 download: {e}")
+                    app.logger.error(f"Error type: {type(e).__name__}")
+                    import traceback
+                    app.logger.error(f"Traceback: {traceback.format_exc()}")
+                    return jsonify({'error': f'Audio download failed with unexpected error: {str(e)}'}), 500
             
             # --- Existing Video Download Logic (else block) ---
             else:
@@ -737,10 +1169,36 @@ def download_thumbnail(video_id):
     # Check if this is a Shorts video using the 'is_shorts' query parameter
     is_shorts = request.args.get('is_shorts') == 'true'
     
-    thumbnail_url = f"https://i.ytimg.com/vi/{video_id}/maxresdefault.jpg"
+    # List of thumbnail URLs to try in order of preference (high to low quality)
+    thumbnail_urls = [
+        f"https://i.ytimg.com/vi/{video_id}/maxresdefault.jpg",  # 1280x720
+        f"https://i.ytimg.com/vi/{video_id}/hqdefault.jpg",     # 480x360
+        f"https://i.ytimg.com/vi/{video_id}/mqdefault.jpg",     # 320x180
+        f"https://i.ytimg.com/vi/{video_id}/default.jpg"        # 120x90
+    ]
+    
+    response = None
+    successful_url = None
+    
+    # Try each thumbnail URL until one works
+    for thumbnail_url in thumbnail_urls:
+        try:
+            response = requests.get(thumbnail_url, stream=True, timeout=10)
+            if response.status_code == 200:
+                successful_url = thumbnail_url
+                app.logger.info(f"Successfully loaded thumbnail from: {thumbnail_url}")
+                break
+            else:
+                app.logger.warning(f"Thumbnail not found at: {thumbnail_url} (Status: {response.status_code})")
+        except requests.exceptions.RequestException as e:
+            app.logger.warning(f"Failed to fetch thumbnail from {thumbnail_url}: {e}")
+            continue
+    
+    if not response or response.status_code != 200:
+        app.logger.error(f"All thumbnail URLs failed for video ID: {video_id}")
+        return "Thumbnail not found", 404
+    
     try:
-        response = requests.get(thumbnail_url, stream=True)
-        response.raise_for_status()
 
         # Create an in-memory byte stream for the image data
         img_io = BytesIO()

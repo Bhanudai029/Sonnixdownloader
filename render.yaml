@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: youtube-auto-downloader
+    env: python
+    region: oregon
+    plan: free
+    branch: main
+    buildCommand: "chmod +x build.sh && ./build.sh"
+    startCommand: "gunicorn app_web:app --bind 0.0.0.0:$PORT --workers 2 --timeout 300"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: PORT
+        value: 10000
+      - key: CHROME_BIN
+        value: /usr/bin/chromium-browser
+      - key: CHROMEDRIVER_PATH
+        value: /usr/bin/chromedriver
+      - key: SUPABASE_URL
+        value: https://aekvevvuanwzmjealdkl.supabase.co
+      - key: SUPABASE_KEY
+        sync: false
+    disk:
+      name: youtube-downloads
+      mountPath: /opt/render/project/src/downloads
+      sizeGB: 1

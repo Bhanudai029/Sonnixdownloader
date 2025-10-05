@@ -799,6 +799,34 @@
                             const isShorts = currentUrl.toLowerCase().includes('/shorts/');
                             const thumbnailUrl = `/download_thumbnail/${data.id}?is_shorts=${isShorts}`;
                             thumbnailEl.src = thumbnailUrl;
+                            
+                            // Add error handler for thumbnail loading
+                            thumbnailEl.onerror = function() {
+                                console.warn('Thumbnail failed to load, using fallback');
+                                // Create a fallback placeholder
+                                const canvas = document.createElement('canvas');
+                                const ctx = canvas.getContext('2d');
+                                canvas.width = 480;
+                                canvas.height = 270;
+                                
+                                // Draw a gradient background
+                                const gradient = ctx.createLinearGradient(0, 0, 480, 270);
+                                gradient.addColorStop(0, '#4f46e5');
+                                gradient.addColorStop(1, '#7c3aed');
+                                ctx.fillStyle = gradient;
+                                ctx.fillRect(0, 0, 480, 270);
+                                
+                                // Add text
+                                ctx.fillStyle = 'white';
+                                ctx.font = 'bold 16px Arial';
+                                ctx.textAlign = 'center';
+                                ctx.fillText('Thumbnail', 240, 120);
+                                ctx.fillText('Not Available', 240, 145);
+                                
+                                // Set the canvas as the image source
+                                this.src = canvas.toDataURL();
+                            };
+                            
                             console.log('Thumbnail URL:', thumbnailUrl);
                         }
                         const titleEl = document.getElementById('title');
