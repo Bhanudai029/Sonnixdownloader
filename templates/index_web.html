@@ -333,6 +333,68 @@
             background: linear-gradient(135deg, rgba(0, 212, 255, 0.05) 0%, rgba(139, 92, 246, 0.05) 100%);
         }
         
+        /* Cookie Alert Banner */
+        .cookie-alert {
+            display: none;
+            background: linear-gradient(135deg, rgba(255, 59, 48, 0.15) 0%, rgba(255, 149, 0, 0.15) 100%);
+            border: 2px solid rgba(255, 59, 48, 0.5);
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 25px;
+            animation: pulse-glow 2s ease-in-out infinite;
+        }
+        
+        .cookie-alert.show {
+            display: block;
+        }
+        
+        .cookie-alert h3 {
+            color: #ff9500;
+            font-size: 1.3em;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .cookie-alert p {
+            color: #fff;
+            line-height: 1.6;
+            margin-bottom: 15px;
+        }
+        
+        .cookie-alert .alert-actions {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+        
+        .cookie-alert .btn-alert {
+            padding: 10px 20px;
+            background: linear-gradient(135deg, #ff3b30 0%, #ff9500 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            text-decoration: none;
+        }
+        
+        .cookie-alert .btn-alert:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(255, 59, 48, 0.4);
+        }
+        
+        @keyframes pulse-glow {
+            0%, 100% {
+                box-shadow: 0 0 20px rgba(255, 59, 48, 0.3);
+            }
+            50% {
+                box-shadow: 0 0 40px rgba(255, 59, 48, 0.5);
+            }
+        }
+        
         @media (max-width: 768px) {
             .header h1 {
                 font-size: 1.8em;
@@ -352,6 +414,17 @@
         </div>
         
         <div class="content">
+            <!-- Cookie Refresh Alert (shown dynamically when auth fails) -->
+            <div id="cookieAlert" class="cookie-alert">
+                <h3>🔑 Cookie Refresh Required!</h3>
+                <p><strong>YouTube is requesting authentication.</strong> Your download failed because cookies are missing, expired, or YouTube detected automated access.</p>
+                <p>📌 <strong>Action:</strong> Please update your cookies using one of the methods below to continue downloading.</p>
+                <div class="alert-actions">
+                    <button class="btn-alert" onclick="scrollToCookies()">📤 Upload Cookies File</button>
+                    <button class="btn-alert" onclick="scrollToPasteCookies()">📋 Paste Cookies</button>
+                </div>
+            </div>
+            
             <div class="input-section">
                 <label for="songs">📝 Enter Your Song List:</label>
                 
@@ -471,6 +544,16 @@
                 const phaseText = data.phase ? ` • ${data.phase}` : '';
                 document.getElementById('status').textContent = 
                     statusEmoji[data.status] + ' ' + data.status.toUpperCase() + phaseText;
+                
+                // Show/hide cookie alert based on needs_cookies flag
+                const cookieAlert = document.getElementById('cookieAlert');
+                if (data.needs_cookies) {
+                    cookieAlert.classList.add('show');
+                    // Scroll to alert to make it visible
+                    cookieAlert.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                } else {
+                    cookieAlert.classList.remove('show');
+                }
                 
                 // Update progress bar
                 if (data.total > 0) {
@@ -625,6 +708,38 @@
             document.getElementById('screenshots').innerHTML = '';
             document.getElementById('currentSong').textContent = '';
             document.getElementById('cookiesStatus').textContent = '';
+            
+            // Hide cookie alert when resetting
+            document.getElementById('cookieAlert').classList.remove('show');
+        }
+        
+        // Helper functions for cookie alert buttons
+        function scrollToCookies() {
+            const cookieSection = document.querySelector('.input-section:nth-of-type(2)');
+            if (cookieSection) {
+                cookieSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                // Highlight the file input briefly
+                const fileInput = cookieSection.querySelector('input[type="file"]');
+                if (fileInput) {
+                    fileInput.style.border = '2px solid #ff9500';
+                    setTimeout(() => {
+                        fileInput.style.border = '';
+                    }, 2000);
+                }
+            }
+        }
+        
+        function scrollToPasteCookies() {
+            const cookieTextarea = document.getElementById('cookiesText');
+            if (cookieTextarea) {
+                cookieTextarea.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                // Highlight the textarea briefly
+                cookieTextarea.style.border = '2px solid #ff9500';
+                cookieTextarea.focus();
+                setTimeout(() => {
+                    cookieTextarea.style.border = '';
+                }, 2000);
+            }
         }
     </script>
 </body>

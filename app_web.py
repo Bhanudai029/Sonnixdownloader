@@ -70,7 +70,8 @@ download_progress = {
     'results': [],
     'logs': [],
     'phase': '',  # human-readable step description for UI
-    'screenshots': []  # List of screenshot URLs
+    'screenshots': [],  # List of screenshot URLs
+    'needs_cookies': False  # Flag to show cookie refresh alert in UI
 }
 progress_lock = threading.Lock()
 
@@ -534,8 +535,13 @@ class YouTubeAutoDownloaderWeb:
                     self.log(f"   🐛 DEBUG: Process forcefully killed after timeout")
                     self.log(f"   Common causes on Render:")
                     self.log(f"   1. Slow network throttling download")
-                    self.log(f"   2. YouTube bot detection / rate limiting")
+                    self.log(f"   2. YouTube bot detection / rate limiting - may need fresh cookies")
                     self.log(f"   3. Video is geoblocked or restricted")
+                    
+                    # Check if it's a cookie issue
+                    if stdout and ('login' in stdout.lower() or 'sign in' in stdout.lower()):
+                        self.log(f"   🔑 ACTION REQUIRED: Please update your cookies")
+                        download_progress['needs_cookies'] = True
                     
                     if stdout:
                         self.log(f"   📤 Partial output (last 5 lines):")
@@ -579,10 +585,15 @@ class YouTubeAutoDownloaderWeb:
                         if line.strip():
                             self.log(f"      {line[:250]}")
                 
-                # Check for common error patterns
+                # Check for common error patterns and set specific error flags
                 full_output = (result.stderr + result.stdout).lower()
-                if 'sign in' in full_output or 'bot' in full_output:
-                    self.log(f"   ⚠️ Detected: YouTube bot detection - try updating cookies")
+                
+                # Check for authentication/cookie issues
+                if any(keyword in full_output for keyword in ['sign in', 'bot', 'login_required', 'login required', 'cookies']):
+                    self.log(f"   ⚠️ Detected: YouTube bot detection / login required")
+                    self.log(f"   🔑 ACTION REQUIRED: Please update your cookies to continue")
+                    self.log(f"   📌 Use the 'Upload Cookies' or 'Paste Cookies' section above")
+                    download_progress['needs_cookies'] = True
                 elif 'unavailable' in full_output or 'private' in full_output:
                     self.log(f"   ⚠️ Detected: Video is unavailable or private")
                 elif 'http error' in full_output or 'urllib' in full_output:
@@ -630,7 +641,10 @@ def process_songs():
                 'progress': 0,
                 'total': 0,
                 'results': [],
-                'logs': []
+                'logs': [],
+                'phase': '',
+                'screenshots': [],
+                'needs_cookies': False
             }
         
         # Initialize downloader
@@ -829,7 +843,9 @@ def reset_progress():
             'total': 0,
             'results': [],
             'logs': [],
-            'screenshots': []
+            'screenshots': [],
+            'phase': '',
+            'needs_cookies': False
         }
     return jsonify({'success': True})
 
