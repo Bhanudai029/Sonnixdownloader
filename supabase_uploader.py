@@ -12,7 +12,13 @@ from urllib.parse import quote
 class SupabaseUploader:
     def __init__(self, supabase_url: str, supabase_key: str):
         """Initialize Supabase client"""
-        self.supabase = create_client(supabase_url, supabase_key)
+        try:
+            # Updated for latest Supabase client API
+            self.supabase = create_client(supabase_url, supabase_key)
+        except Exception as e:
+            # Fallback for older API if needed
+            from supabase import Client
+            self.supabase = Client(supabase_url, supabase_key)
 
     def upload_audio_file(self, file_path: str, bucket_name: str = "audio-files",
                          file_name: Optional[str] = None) -> dict:
