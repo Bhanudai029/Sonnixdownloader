@@ -449,9 +449,25 @@
                             (result.status === 'found' ? 'success' : 'failed');
                         
                         const emoji = result.status === 'found' ? '✅' : '❌';
+                        
+                        let urlsHtml = '';
+                        if (result.audio_url || result.thumbnail_url) {
+                            urlsHtml = '<div style="margin-top:5px;font-size:0.9em;">';
+                            if (result.audio_url) {
+                                urlsHtml += `<a href="${result.audio_url}" target="_blank" style="color:#667eea;margin-right:10px;">🎵 Audio</a>`;
+                            }
+                            if (result.thumbnail_url) {
+                                urlsHtml += `<a href="${result.thumbnail_url}" target="_blank" style="color:#667eea;">🖼️ Thumbnail</a>`;
+                            }
+                            urlsHtml += '</div>';
+                        }
+                        
                         itemDiv.innerHTML = `
                             <span class="emoji">${emoji}</span>
-                            <span>${result.song}</span>
+                            <div style="flex:1;">
+                                <span>${result.song}</span>
+                                ${urlsHtml}
+                            </div>
                         `;
                         resultsDiv.appendChild(itemDiv);
                     });

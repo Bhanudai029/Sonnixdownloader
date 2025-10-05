@@ -552,7 +552,7 @@ def process_songs():
         downloader = YouTubeAutoDownloaderWeb(
             thumbnail_folder="thumbnails",
             audio_folder="Audios",
-            enable_supabase=False  # Disable for web version
+            enable_supabase=True  # Enable Supabase uploads
         )
         
         # Parse songs
@@ -617,14 +617,57 @@ def process_in_background(songs):
         
         # Download thumbnails and audio
         success_count = 0
+        uploaded_count = 0
         for url, song_name in video_data:
             downloader.download_single_thumbnail(url, song_name)
             if downloader.download_single_audio(url, song_name):
                 success_count += 1
+                
+                # Upload to Supabase if enabled
+                if downloader.enable_supabase and downloader.supabase_uploader:
+                    downloader.log(f"📤 Uploading {song_name} to Supabase...")
+                    
+                    clean_song_name = downloader.clean_filename(song_name)
+                    audio_file = downloader.audio_folder / f"{clean_song_name}.mp3"
+                    thumbnail_file = downloader.thumbnail_folder / f"{clean_song_name}.png"
+                    
+                    audio_url = None
+                    thumbnail_url = None
+                    
+                    # Upload audio
+                    if audio_file.exists():
+                        audio_url = downloader.supabase_uploader.upload_audio(
+                            str(audio_file), song_name
+                        )
+                        if audio_url:
+                            downloader.log(f"   ✅ Audio URL: {audio_url}")
+                        else:
+                            downloader.log(f"   ⚠️ Audio upload failed")
+                    
+                    # Upload thumbnail
+                    if thumbnail_file.exists():
+                        thumbnail_url = downloader.supabase_uploader.upload_thumbnail(
+                            str(thumbnail_file), song_name
+                        )
+                        if thumbnail_url:
+                            downloader.log(f"   ✅ Thumbnail URL: {thumbnail_url}")
+                        else:
+                            downloader.log(f"   ⚠️ Thumbnail upload failed")
+                    
+                    # Update result with URLs
+                    if audio_url or thumbnail_url:
+                        uploaded_count += 1
+                        with progress_lock:
+                            for result in download_progress['results']:
+                                if result['song'] == song_name:
+                                    result['audio_url'] = audio_url
+                                    result['thumbnail_url'] = thumbnail_url
+                                    break
         
+        upload_status = f", {uploaded_count} uploaded to Supabase" if downloader.enable_supabase else ""
         with progress_lock:
             download_progress['status'] = 'completed'
-            download_progress['logs'].append(f"\n🎉 Process complete! {success_count}/{len(songs)} songs downloaded")
+            download_progress['logs'].append(f"\n🎉 Process complete! {success_count}/{len(songs)} songs downloaded{upload_status}")
         
     except Exception as e:
         with progress_lock:
