@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """
-Supabase Auto Cleanup
-Automatically delete audio files from Supabase bucket that were added within the last 12 hours
+Supabase Auto Cleanup (Interactive)
+Lists audio files added within the last 12 hours and lets you:
+  - Delete all (type yes)
+  - Or type one or more item numbers (e.g., "2" or "1,3") to delete selectively
 """
 
 import os
@@ -179,28 +181,74 @@ def main():
     # Configuration
     HOURS_THRESHOLD = 12  # Delete files added within the last 12 hours
     DRY_RUN = False  # Set to True to preview what would be deleted without actually deleting
-    
+
     print("\n⚙️  Configuration:")
     print(f"   Time threshold: {HOURS_THRESHOLD} hours")
     print(f"   Dry run mode: {'Yes' if DRY_RUN else 'No'}")
     print()
-    
-    # Confirmation prompt if not in dry run mode
-    if not DRY_RUN:
-        print("⚠️  WARNING: This will permanently delete files from Supabase!")
-        confirmation = input(f"   Delete all files added within the last {HOURS_THRESHOLD} hours? (yes/no): ").strip().lower()
-        
-        if confirmation not in ['yes', 'y']:
-            print("❌ Operation cancelled by user")
-            return
-    
+
     # Initialize cleanup tool
     try:
         cleanup = SupabaseAutoCleanup(SUPABASE_URL, SUPABASE_KEY, BUCKET_NAME)
         
-        # Run auto cleanup
-        cleanup.auto_cleanup(hours=HOURS_THRESHOLD, dry_run=DRY_RUN)
-        
+        # 1) List recent files
+        recent_files = cleanup.get_recent_files(hours=HOURS_THRESHOLD)
+
+        if not recent_files:
+            print("\n✅ No recent files found to delete!")
+            print(f"   All files in the bucket are older than {HOURS_THRESHOLD} hours")
+            return
+
+        # Display numbered list (show song names without extension)
+        print("\n📜 Files added within the last 12 hours:")
+        for idx, info in enumerate(recent_files, 1):
+            display_name = Path(info['name']).stem
+            print(f"{idx}. {display_name}")
+
+        # 2) Ask to delete all
+        print("\n⚠️  WARNING: This will permanently delete from Supabase!")
+        answer = input("Delete ALL of the above? (yes/no): ").strip().lower()
+
+        if answer in ['yes', 'y']:
+            cleanup.delete_files(recent_files, dry_run=DRY_RUN)
+            return
+
+        # 3) Ask for manual selection when user says no
+        print("Type the number(s) to delete (e.g., 2 or 1,3). Press Enter to cancel.")
+        selection = input("Number(s) to delete: ").strip()
+
+        if not selection:
+            print("❌ Operation cancelled by user")
+            return
+
+        # Parse numbers
+        try:
+            numbers = [int(x) for x in selection.replace(' ', '').split(',') if x]
+        except ValueError:
+            print("❌ Invalid input. Please enter number(s) like 2 or 1,3")
+            return
+
+        # Validate range and build selection
+        chosen = []
+        for n in numbers:
+            if 1 <= n <= len(recent_files):
+                chosen.append(recent_files[n - 1])
+            else:
+                print(f"⚠️  Ignoring invalid number: {n}")
+
+        if not chosen:
+            print("❌ Nothing selected to delete")
+            return
+
+        # Confirm and delete selected
+        names_preview = ', '.join(Path(f['name']).stem for f in chosen)
+        confirm_one = input(f"Delete selected: {names_preview}? (yes/no): ").strip().lower()
+        if confirm_one not in ['yes', 'y']:
+            print("❌ Operation cancelled by user")
+            return
+
+        cleanup.delete_files(chosen, dry_run=DRY_RUN)
+
     except Exception as e:
         print(f"\n💥 Error: {str(e)}")
         import traceback
