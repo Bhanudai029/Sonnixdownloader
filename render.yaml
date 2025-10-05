@@ -5,11 +5,11 @@ services:
     region: oregon
     plan: free
     branch: main
-    buildCommand: "chmod +x build.sh && ./build.sh"
+    buildCommand: "pip install -r requirements.txt && chmod +x build.sh && bash build.sh"
     startCommand: "gunicorn app_web:app --bind 0.0.0.0:$PORT --workers 2 --timeout 300"
     envVars:
       - key: PYTHON_VERSION
-        value: 3.11.0
+        value: 3.11.9
       - key: PORT
         value: 10000
       - key: CHROME_BIN
