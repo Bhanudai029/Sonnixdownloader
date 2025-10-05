@@ -2,16 +2,17 @@ services:
   - type: web
     name: youtube-auto-downloader
     env: python
+    runtime: python
     region: oregon
     plan: free
     branch: main
-    buildCommand: "pip install -r requirements.txt && chmod +x build.sh && bash build.sh"
-    startCommand: "gunicorn app_web:app --bind 0.0.0.0:$PORT --workers 2 --timeout 300"
+    buildCommand: "pip install --upgrade pip && pip install -r requirements.txt && chmod +x build.sh && bash build.sh"
+    startCommand: "gunicorn app_web:app --bind 0.0.0.0:$PORT --workers 1 --timeout 300 --log-level info"
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.9
       - key: PORT
-        value: 10000
+        generateValue: true
       - key: CHROME_BIN
         value: /usr/bin/chromium-browser
       - key: CHROMEDRIVER_PATH
@@ -20,7 +21,3 @@ services:
         value: https://aekvevvuanwzmjealdkl.supabase.co
       - key: SUPABASE_KEY
         sync: false
-    disk:
-      name: youtube-downloads
-      mountPath: /opt/render/project/src/downloads
-      sizeGB: 1

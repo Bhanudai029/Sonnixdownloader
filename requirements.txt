@@ -3,8 +3,10 @@ Werkzeug==3.0.1
 yt-dlp>=2024.8.6
 requests==2.31.0
 python-dotenv==1.0.1
+google-api-python-client==2.149.0
 Pillow==10.4.0
 gunicorn==21.2.0
 beautifulsoup4==4.12.3
 selenium==4.18.1
 supabase==2.3.4
+python-socks==2.4.3
