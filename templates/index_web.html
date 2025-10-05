@@ -324,6 +324,13 @@
                 </div>
             </div>
             
+            <div class="input-section" style="margin-top: -10px;">
+                <label>🍪 Optional: Upload cookies.txt (to bypass YouTube bot checks)</label>
+                <input type="file" id="cookiesFile" accept=".txt" />
+                <button class="btn-secondary" style="margin-top:10px;" onclick="uploadCookies()">Upload Cookies</button>
+                <span id="cookiesStatus" style="margin-left:10px;color:#28a745;font-weight:600"></span>
+            </div>
+            
             <div class="progress-section" id="progressSection">
                 <div class="status" id="status">🔄 Processing...</div>
                 <div class="progress-bar-container">
@@ -471,6 +478,27 @@
             }
         }
         
+        async function uploadCookies() {
+            const input = document.getElementById('cookiesFile');
+            if (!input.files || input.files.length === 0) {
+                alert('Please select a cookies.txt file first.');
+                return;
+            }
+            const form = new FormData();
+            form.append('file', input.files[0]);
+            try {
+                const res = await fetch('/api/upload_cookies', { method: 'POST', body: form });
+                const data = await res.json();
+                if (data.success) {
+                    document.getElementById('cookiesStatus').textContent = 'Uploaded ✔';
+                } else {
+                    alert('Cookie upload failed: ' + data.message);
+                }
+            } catch (e) {
+                alert('Cookie upload error: ' + e.message);
+            }
+        }
+
         async function resetForm() {
             // Stop polling
             if (progressInterval) {
@@ -497,6 +525,7 @@
             document.getElementById('results').innerHTML = '';
             document.getElementById('screenshots').innerHTML = '';
             document.getElementById('currentSong').textContent = '';
+            document.getElementById('cookiesStatus').textContent = '';
         }
     </script>
 </body>

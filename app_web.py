@@ -43,6 +43,24 @@ app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max request size
 SCREENSHOTS_FOLDER = Path("screenshots")
 SCREENSHOTS_FOLDER.mkdir(parents=True, exist_ok=True)
 
+# Cookies path for yt-dlp (optional but recommended when YouTube challenges requests)
+COOKIES_PATH = Path("cookies.txt")
+
+def initialize_cookies_from_env() -> bool:
+    """Optionally initialize cookies from base64 env var `YTDLP_COOKIES_B64`."""
+    try:
+        encoded = os.environ.get("YTDLP_COOKIES_B64", "").strip()
+        if not encoded:
+            return False
+        data = base64.b64decode(encoded)
+        COOKIES_PATH.write_bytes(data)
+        return True
+    except Exception:
+        return False
+
+# Initialize cookies once if provided via env
+initialize_cookies_from_env()
+
 # Global variables for progress tracking
 download_progress = {
     'status': 'idle',  # idle, processing, completed, error
@@ -268,16 +286,23 @@ class YouTubeAutoDownloaderWeb:
             self.log("   📡 Using yt-dlp search (no browser required)...")
             
             try:
-                # Run yt-dlp to get video URL
+                # Build yt-dlp args
+                args = [
+                    sys.executable, '-m', 'yt_dlp',
+                    '--get-id',
+                    '--no-warnings',
+                    '--no-playlist',
+                ]
+                if COOKIES_PATH.exists():
+                    args += ['--cookies', str(COOKIES_PATH)]
+                    self.log("   🍪 Using cookies.txt for search")
+                args.append(search_query)
+
                 result = subprocess.run(
-                    [sys.executable, '-m', 'yt_dlp', 
-                     '--get-id', 
-                     '--no-warnings',
-                     '--no-playlist',
-                     search_query],
+                    args,
                     capture_output=True,
                     text=True,
-                    timeout=20
+                    timeout=25
                 )
                 
                 if result.returncode == 0 and result.stdout.strip():
@@ -433,6 +458,13 @@ class YouTubeAutoDownloaderWeb:
                 '-o', str(self.audio_folder / f'{clean_song_name}.%(ext)s'),
                 url
             ]
+
+            # Add cookies if available
+            if COOKIES_PATH.exists():
+                yt_dlp_options[0:0] = []  # keep structure
+                yt_dlp_options.insert(3, '--cookies')
+                yt_dlp_options.insert(4, str(COOKIES_PATH))
+                self.log("   🍪 Using cookies.txt for download")
             
             result = subprocess.run(
                 yt_dlp_options,
@@ -588,6 +620,27 @@ def process_in_background(songs):
         with progress_lock:
             download_progress['status'] = 'error'
             download_progress['logs'].append(f"💥 Error: {str(e)}")
+
+@app.route('/api/upload_cookies', methods=['POST'])
+def upload_cookies():
+    """Upload a cookies.txt file to use with yt-dlp."""
+    try:
+        if 'file' not in request.files:
+            return jsonify({'success': False, 'message': 'No file provided'}), 400
+        file = request.files['file']
+        if not file.filename:
+            return jsonify({'success': False, 'message': 'Empty filename'}), 400
+        data = file.read()
+        # very basic validation: must contain "youtube.com"
+        if b'youtube.com' not in data and b'VISITOR_INFO1_LIVE' not in data:
+            # still allow, but warn
+            pass
+        COOKIES_PATH.write_bytes(data)
+        with progress_lock:
+            download_progress['logs'].append('🍪 cookies.txt uploaded')
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
 
 @app.route('/api/progress')
 def get_progress():
