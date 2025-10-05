@@ -565,7 +565,7 @@ def process_songs():
             return jsonify({'success': False, 'message': 'No valid songs found'})
         
         with progress_lock:
-            steps_per_song = 3 + (2 if downloader.enable_supabase else 0)  # search, thumb, audio, [upload audio, upload thumb]
+            steps_per_song = 2 + (1 if downloader.enable_supabase else 0)  # search, audio, [upload audio]
             download_progress['total'] = len(songs) * steps_per_song
             download_progress['logs'].append(
                 f"📝 Found {len(songs)} songs to process • Total steps: {download_progress['total']}"
@@ -621,18 +621,10 @@ def process_in_background(songs):
             
             time.sleep(1)  # Small delay between searches
         
-        # Download thumbnails and audio
+        # Download audio only
         success_count = 0
         uploaded_count = 0
         for url, song_name in video_data:
-            # Indicate step: downloading thumbnail
-            with progress_lock:
-                download_progress['logs'].append(f"🖼️ Downloading thumbnail: {song_name}")
-            downloader.download_single_thumbnail(url, song_name)
-            # Step done: thumbnail
-            with progress_lock:
-                download_progress['progress'] += 1
-
             # Indicate step: downloading audio
             with progress_lock:
                 download_progress['logs'].append(f"🎵 Downloading audio: {song_name}")
@@ -648,7 +640,6 @@ def process_in_background(songs):
                     
                     clean_song_name = downloader.clean_filename(song_name)
                     audio_file = downloader.audio_folder / f"{clean_song_name}.mp3"
-                    thumbnail_file = downloader.thumbnail_folder / f"{clean_song_name}.png"
                     
                     audio_url = None
                     thumbnail_url = None
@@ -666,27 +657,17 @@ def process_in_background(songs):
                         with progress_lock:
                             download_progress['progress'] += 1
                     
-                    # Upload thumbnail
-                    if thumbnail_file.exists():
-                        thumbnail_url = downloader.supabase_uploader.upload_thumbnail(
-                            str(thumbnail_file), f"{clean_song_name}.png"
-                        )
-                        if thumbnail_url:
-                            downloader.log(f"   ✅ Thumbnail URL: {thumbnail_url}")
-                        else:
-                            downloader.log(f"   ⚠️ Thumbnail upload failed")
-                        # Step done: thumbnail upload
-                        with progress_lock:
-                            download_progress['progress'] += 1
+                    # Thumbnail upload disabled for Render
+                    thumbnail_url = None
                     
                     # Update result with URLs
-                    if audio_url or thumbnail_url:
+                    if audio_url:
                         uploaded_count += 1
                         with progress_lock:
                             for result in download_progress['results']:
                                 if result['song'] == song_name:
                                     result['audio_url'] = audio_url
-                                    result['thumbnail_url'] = thumbnail_url
+                                    # Thumbnail URL intentionally omitted
                                     break
         
         upload_status = f", {uploaded_count} uploaded to Supabase" if downloader.enable_supabase else ""
