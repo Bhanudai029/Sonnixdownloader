@@ -480,6 +480,10 @@ class YouTubeAutoDownloaderWeb:
                 self.log(f"   🌐 Starting headless browser...")
                 driver = webdriver.Chrome(options=chrome_options)
 
+                # Set driver in downloader instance for screenshot capability
+                old_driver = getattr(self, 'driver', None)
+                self.driver = driver
+
                 try:
                     self.log(f"   🌐 Navigating to ezconv.com...")
                     driver.get("https://ezconv.com/v820")
@@ -500,6 +504,9 @@ class YouTubeAutoDownloaderWeb:
                     convert_button = driver.find_element(By.CSS_SELECTOR, "button[type='submit'], input[type='submit']")
                     convert_button.click()
 
+                    # Take screenshot after clicking convert
+                    self.capture_screenshot("after_convert_click")
+
                     self.log(f"   ⏳ Waiting for conversion to complete...")
                     # Wait for download button to appear
                     WebDriverWait(driver, 60).until(
@@ -509,6 +516,9 @@ class YouTubeAutoDownloaderWeb:
                     self.log(f"   💾 Downloading MP3 file...")
                     # Find the download link
                     download_link = driver.find_element(By.CSS_SELECTOR, "a[href*='download']")
+
+                    # Take screenshot of the final conversion page
+                    self.capture_screenshot("conversion_complete")
 
                     # Get the download URL
                     download_url = download_link.get_attribute("href")
@@ -527,6 +537,11 @@ class YouTubeAutoDownloaderWeb:
                     self.log(f"   ✅ Successfully downloaded: {audio_path}")
 
                 finally:
+                    # Restore original driver or set to None
+                    if old_driver is not None:
+                        self.driver = old_driver
+                    else:
+                        self.driver = None
                     driver.quit()
 
             except ImportError:
@@ -540,6 +555,12 @@ class YouTubeAutoDownloaderWeb:
 
             except Exception as e:
                 self.log(f"   ❌ Error automating ezconv.com: {str(e)[:200]}")
+                # Take screenshot of the error state (if driver is available)
+                try:
+                    if hasattr(self, 'driver') and self.driver:
+                        self.capture_screenshot("ezconv_error")
+                except:
+                    pass  # Don't let screenshot errors break the main error
                 raise
 
             # Reset phase on success
