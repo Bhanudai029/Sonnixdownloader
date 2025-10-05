@@ -458,17 +458,20 @@ class YouTubeAutoDownloaderWeb:
                 '--extract-audio',
                 '--audio-format', 'mp3',
                 '--audio-quality', '192K',
-                '--socket-timeout', '15',
+                '--socket-timeout', '10',
                 '--retries', '2',
                 '--fragment-retries', '2',
+                '--file-access-retries', '2',
                 '--force-ipv4',
-                '--no-progress',
+                '--newline',
+                '--verbose',
                 '--no-playlist',
-                '--no-warnings',
                 '--ignore-errors',
                 '--no-check-certificate',
                 '--prefer-insecure',
-                '--concurrent-fragments', '4',
+                '--concurrent-fragments', '2',
+                '--http-chunk-size', '1M',
+                '--limit-rate', '5M',
                 '--extractor-args', 'youtube:player_client=android,web,ios;player_skip=webpage',
                 '--user-agent', 'Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36',
                 '-o', str(self.audio_folder / f'{clean_song_name}.%(ext)s'),
@@ -482,35 +485,39 @@ class YouTubeAutoDownloaderWeb:
                 yt_dlp_options.insert(4, str(COOKIES_PATH))
                 self.log("   🍪 Using cookies.txt for download")
             
+            self.log("   ⚙️ Starting yt-dlp with 10s socket timeout & 120s total limit...")
+            start_time = time.time()
+            
             result = subprocess.run(
                 yt_dlp_options,
                 capture_output=True,
                 text=True,
-                timeout=240
+                timeout=120
             )
+            
+            elapsed = time.time() - start_time
+            self.log(f"   ⏱️ yt-dlp completed in {elapsed:.1f}s")
             
             if result.returncode == 0:
                 self.log(f"✅ Audio downloaded: {song_name}")
                 return True
             else:
-                self.log(f"❌ Failed to download: {song_name}")
-                # Log the actual error from yt-dlp
+                self.log(f"❌ Failed to download: {song_name} (exit code: {result.returncode})")
+                # Log the actual error from yt-dlp (verbose output)
                 if result.stderr:
                     error_lines = result.stderr.strip().split('\n')
-                    # Log last few lines of error (most relevant)
-                    for line in error_lines[-5:]:
+                    for line in error_lines[-10:]:
                         if line.strip():
-                            self.log(f"   Error: {line[:150]}")
+                            self.log(f"   stderr: {line[:200]}")
                 if result.stdout:
                     stdout_lines = result.stdout.strip().split('\n')
-                    # Log last few lines of stdout
-                    for line in stdout_lines[-3:]:
+                    for line in stdout_lines[-10:]:
                         if line.strip():
-                            self.log(f"   Output: {line[:150]}")
+                            self.log(f"   stdout: {line[:200]}")
                 return False
                 
         except subprocess.TimeoutExpired:
-            self.log(f"⏰ Timeout: Download took too long (>5 min)")
+            self.log(f"⏰ TIMEOUT: yt-dlp exceeded 120s - network stall/YouTube throttling/bot detection")
             return False
         except Exception as e:
             self.log(f"💥 Error: {str(e)[:200]}")
