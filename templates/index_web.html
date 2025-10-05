@@ -231,6 +231,35 @@
             font-size: 1.5em;
         }
         
+        .screenshots {
+            margin-top: 20px;
+        }
+        
+        .screenshot-item {
+            margin: 10px 0;
+            padding: 15px;
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            border-radius: 5px;
+        }
+        
+        .screenshot-item h4 {
+            margin: 0 0 10px 0;
+            color: #856404;
+        }
+        
+        .screenshot-item img {
+            max-width: 100%;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        
+        .screenshot-item img:hover {
+            transform: scale(1.02);
+        }
+        
         .spinner {
             display: inline-block;
             width: 20px;
@@ -307,6 +336,8 @@
                 <div class="logs" id="logs"></div>
                 
                 <div class="results" id="results"></div>
+                
+                <div class="screenshots" id="screenshots" style="margin-top: 20px;"></div>
             </div>
         </div>
         
@@ -411,6 +442,24 @@
                     });
                 }
                 
+                // Update screenshots
+                if (data.screenshots && data.screenshots.length > 0) {
+                    const screenshotsDiv = document.getElementById('screenshots');
+                    screenshotsDiv.innerHTML = '<h4 style="margin-bottom: 10px;">📸 Debug Screenshots:</h4>';
+                    
+                    data.screenshots.forEach(screenshot => {
+                        const itemDiv = document.createElement('div');
+                        itemDiv.className = 'screenshot-item';
+                        
+                        const date = new Date(screenshot.timestamp * 1000).toLocaleTimeString();
+                        itemDiv.innerHTML = `
+                            <h4>🔍 ${screenshot.reason.replace(/_/g, ' ').toUpperCase()} - ${date}</h4>
+                            <img src="${screenshot.url}" alt="Screenshot" onclick="window.open('${screenshot.url}', '_blank')">
+                        `;
+                        screenshotsDiv.appendChild(itemDiv);
+                    });
+                }
+                
                 // Stop polling if completed or error
                 if (data.status === 'completed' || data.status === 'error') {
                     clearInterval(progressInterval);
@@ -446,6 +495,7 @@
             document.getElementById('progressText').textContent = '0%';
             document.getElementById('logs').innerHTML = '';
             document.getElementById('results').innerHTML = '';
+            document.getElementById('screenshots').innerHTML = '';
             document.getElementById('currentSong').textContent = '';
         }
     </script>

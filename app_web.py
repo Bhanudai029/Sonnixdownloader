@@ -5,7 +5,7 @@ Flask web interface for YouTube audio and thumbnail downloader
 Optimized for Render.com deployment
 """
 
-from flask import Flask, render_template, request, jsonify, send_file
+from flask import Flask, render_template, request, jsonify, send_file, send_from_directory
 import os
 import sys
 import time
@@ -14,6 +14,7 @@ import subprocess
 import threading
 import json
 from pathlib import Path
+import base64
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
@@ -38,6 +39,10 @@ except ImportError:
 app = Flask(__name__)
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max request size
 
+# Create screenshots folder
+SCREENSHOTS_FOLDER = Path("screenshots")
+SCREENSHOTS_FOLDER.mkdir(parents=True, exist_ok=True)
+
 # Global variables for progress tracking
 download_progress = {
     'status': 'idle',  # idle, processing, completed, error
@@ -45,7 +50,8 @@ download_progress = {
     'progress': 0,
     'total': 0,
     'results': [],
-    'logs': []
+    'logs': [],
+    'screenshots': []  # List of screenshot URLs
 }
 progress_lock = threading.Lock()
 
@@ -71,6 +77,35 @@ class YouTubeAutoDownloaderWeb:
         with progress_lock:
             download_progress['logs'].append(message)
             print(message)  # Also print to console
+    
+    def capture_screenshot(self, reason="error"):
+        """Capture screenshot when stuck or on error"""
+        try:
+            if not self.driver:
+                return None
+            
+            timestamp = int(time.time())
+            filename = f"screenshot_{reason}_{timestamp}.png"
+            filepath = SCREENSHOTS_FOLDER / filename
+            
+            # Take screenshot
+            self.driver.save_screenshot(str(filepath))
+            
+            # Add to progress tracking
+            screenshot_url = f"/screenshots/{filename}"
+            with progress_lock:
+                download_progress['screenshots'].append({
+                    'url': screenshot_url,
+                    'reason': reason,
+                    'timestamp': timestamp
+                })
+            
+            self.log(f"📸 Screenshot captured: {reason}")
+            return screenshot_url
+            
+        except Exception as e:
+            self.log(f"⚠️ Failed to capture screenshot: {str(e)[:50]}")
+            return None
     
     def init_supabase(self):
         """Initialize Supabase uploader with credentials"""
@@ -194,6 +229,7 @@ class YouTubeAutoDownloaderWeb:
                 
                 if not video_links:
                     self.log("   ❌ No video links found")
+                    self.capture_screenshot("no_videos_found")
                     return None
                 
                 # Get first non-shorts video
@@ -220,6 +256,7 @@ class YouTubeAutoDownloaderWeb:
                         
             except TimeoutException:
                 self.log("   ❌ Timeout waiting for video results")
+                self.capture_screenshot("timeout")
                 if retry_attempt < max_retries:
                     self.log(f"   🔄 Retrying search...")
                     time.sleep(8)
@@ -228,6 +265,7 @@ class YouTubeAutoDownloaderWeb:
                 
         except Exception as e:
             self.log(f"❌ Error searching YouTube: {str(e)[:100]}")
+            self.capture_screenshot("exception")
             if retry_attempt < max_retries:
                 time.sleep(5)
                 return self.search_youtube(song_name, retry_attempt + 1, max_retries)
@@ -524,9 +562,15 @@ def reset_progress():
             'progress': 0,
             'total': 0,
             'results': [],
-            'logs': []
+            'logs': [],
+            'screenshots': []
         }
     return jsonify({'success': True})
+
+@app.route('/screenshots/<filename>')
+def serve_screenshot(filename):
+    """Serve screenshot files"""
+    return send_from_directory(SCREENSHOTS_FOLDER, filename)
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
