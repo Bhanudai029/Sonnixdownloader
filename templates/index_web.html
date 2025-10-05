@@ -330,6 +330,14 @@
                 <button class="btn-secondary" style="margin-top:10px;" onclick="uploadCookies()">Upload Cookies</button>
                 <span id="cookiesStatus" style="margin-left:10px;color:#28a745;font-weight:600"></span>
             </div>
+
+            <div class="input-section" style="margin-top: 10px;">
+                <label>📋 Or paste Netscape cookies here:</label>
+                <textarea id="cookiesText" placeholder="# Netscape HTTP Cookie File...\n.example.com\tTRUE\t/\tFALSE\t0\tVISITOR_INFO1_LIVE\t..." style="min-height:120px"></textarea>
+                <div class="button-group" style="margin-top:10px; gap:10px;">
+                    <button class="btn-secondary" style="flex:0 0 auto" onclick="savePastedCookies()">Save Pasted Cookies</button>
+                </div>
+            </div>
             
             <div class="progress-section" id="progressSection">
                 <div class="status" id="status">🔄 Processing...</div>
@@ -496,6 +504,29 @@
                 }
             } catch (e) {
                 alert('Cookie upload error: ' + e.message);
+            }
+        }
+
+        async function savePastedCookies() {
+            const text = document.getElementById('cookiesText').value.trim();
+            if (!text) {
+                alert('Please paste Netscape cookies first.');
+                return;
+            }
+            try {
+                const res = await fetch('/api/paste_cookies', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ cookies: text })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    document.getElementById('cookiesStatus').textContent = 'Saved ✔';
+                } else {
+                    alert('Failed to save cookies: ' + data.message);
+                }
+            } catch (e) {
+                alert('Error saving cookies: ' + e.message);
             }
         }
 

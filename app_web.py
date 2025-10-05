@@ -642,6 +642,22 @@ def upload_cookies():
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 500
 
+@app.route('/api/paste_cookies', methods=['POST'])
+def paste_cookies():
+    """Accept raw Netscape cookies text and save to cookies.txt."""
+    try:
+        payload = request.get_json(silent=True) or {}
+        text = payload.get('cookies', '')
+        if not text.strip():
+            return jsonify({'success': False, 'message': 'Empty cookies text'}), 400
+        # Normalize line endings and write
+        COOKIES_PATH.write_text(text.replace('\r\n', '\n'), encoding='utf-8')
+        with progress_lock:
+            download_progress['logs'].append('🍪 cookies.txt saved from pasted text')
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
 @app.route('/api/progress')
 def get_progress():
     """Get current progress"""
