@@ -274,50 +274,60 @@ class YouTubeAutoDownloaderWeb:
         
         return songs
 
-    def search_youtube(self, song_name, retry_attempt=0, max_retries=1):
-        """Search for song on YouTube using yt-dlp (no browser needed!)"""
+    def search_youtube(self, song_name, retry_attempt=0, max_retries=2):
+        """Search for song on YouTube using direct HTTP requests (fastest & most reliable!)"""
         try:
             retry_text = f" (Retry {retry_attempt + 1}/{max_retries + 1})" if retry_attempt > 0 else ""
             self.log(f"🔍 Searching for: {song_name}{retry_text}")
             
-            # Use yt-dlp's built-in search - much more reliable!
-            search_query = f"ytsearch1:{song_name}"
+            # Use direct HTTP request to YouTube search - much faster than yt-dlp search!
+            search_query = song_name.replace(' ', '+')
+            search_url = f"https://www.youtube.com/results?search_query={search_query}"
             
-            self.log("   📡 Using yt-dlp search (no browser required)...")
+            self.log("   📡 Using direct HTTP search (no yt-dlp needed)...")
             
             try:
-                # Build yt-dlp args
-                args = [
-                    sys.executable, '-m', 'yt_dlp',
-                    '--get-id',
-                    '--no-warnings',
-                    '--no-playlist',
-                ]
-                if COOKIES_PATH.exists():
-                    args += ['--cookies', str(COOKIES_PATH)]
-                    self.log("   🍪 Using cookies.txt for search")
-                args.append(search_query)
-
-                result = subprocess.run(
-                    args,
-                    capture_output=True,
-                    text=True,
-                    timeout=25
-                )
+                headers = {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+                    'Accept-Language': 'en-US,en;q=0.9',
+                }
                 
-                if result.returncode == 0 and result.stdout.strip():
-                    video_id = result.stdout.strip().split('\n')[0]
-                    video_url = f"https://www.youtube.com/watch?v={video_id}"
-                    self.log(f"   ✅ Found: {video_url}")
-                    return video_url
-                else:
-                    self.log(f"   ❌ No results found")
-                    if result.stderr:
-                        self.log(f"   Error: {result.stderr[:100]}")
+                # Make request with timeout
+                response = requests.get(search_url, headers=headers, timeout=15)
+                
+                if response.status_code != 200:
+                    self.log(f"   ❌ HTTP {response.status_code}")
+                    if retry_attempt < max_retries:
+                        time.sleep(3)
+                        return self.search_youtube(song_name, retry_attempt + 1, max_retries)
                     return None
+                
+                # Extract video ID from HTML using regex (faster than BeautifulSoup)
+                # Look for: "videoId":"VIDEO_ID"
+                import re
+                video_id_pattern = r'"videoId":"([a-zA-Z0-9_-]{11})"'
+                matches = re.findall(video_id_pattern, response.text)
+                
+                if not matches:
+                    self.log("   ❌ No video IDs found in response")
+                    if retry_attempt < max_retries:
+                        time.sleep(3)
+                        return self.search_youtube(song_name, retry_attempt + 1, max_retries)
+                    return None
+                
+                # Get first non-shorts video
+                for video_id in matches[:10]:
+                    # Skip shorts (usually start with certain patterns or are too short)
+                    if len(video_id) == 11:  # Valid YouTube video ID
+                        video_url = f"https://www.youtube.com/watch?v={video_id}"
+                        self.log(f"   ✅ Found: {video_url}")
+                        return video_url
+                
+                self.log("   ❌ No valid video found")
+                return None
                     
-            except subprocess.TimeoutExpired:
-                self.log("   ⏰ Search timeout (20s)")
+            except requests.Timeout:
+                self.log("   ⏰ HTTP timeout (15s)")
                 if retry_attempt < max_retries:
                     time.sleep(2)
                     return self.search_youtube(song_name, retry_attempt + 1, max_retries)
