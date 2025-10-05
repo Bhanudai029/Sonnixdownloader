@@ -257,108 +257,57 @@ class YouTubeAutoDownloaderWeb:
         return songs
 
     def search_youtube(self, song_name, retry_attempt=0, max_retries=1):
-        """Search for song on YouTube and return video URL with retry logic"""
+        """Search for song on YouTube using yt-dlp (no browser needed!)"""
         try:
-            search_query = song_name.replace(' ', '+')
-            search_url = f"https://www.youtube.com/results?search_query={search_query}"
-            
             retry_text = f" (Retry {retry_attempt + 1}/{max_retries + 1})" if retry_attempt > 0 else ""
             self.log(f"🔍 Searching for: {song_name}{retry_text}")
             
-            # Reduce timeout to fail faster
-            self.driver.set_page_load_timeout(30)
+            # Use yt-dlp's built-in search - much more reliable!
+            search_query = f"ytsearch1:{song_name}"
+            
+            self.log("   📡 Using yt-dlp search (no browser required)...")
             
             try:
-                self.log("   📡 Loading YouTube search page...")
-                self.driver.get(search_url)
-                self.log("   ✅ Page loaded")
-            except Exception as e:
-                self.log(f"   ⚠️ Page load issue: {str(e)[:80]}")
-                self.capture_screenshot("page_load_failed")
-                raise
-            
-            # Capture screenshot right after load to see what we got
-            self.capture_screenshot("after_page_load")
-            
-            # Handle consent if it appears
-            try:
-                self.log("   🔍 Checking for consent dialogs...")
-                if self.handle_consent_if_present():
-                    self.log("   🔄 Reloading with EN locale...")
-                    self.driver.get(search_url + "&hl=en&gl=US")
-                    self.capture_screenshot("after_consent")
-            except Exception as e:
-                self.log(f"   ⚠️ Consent handling issue: {str(e)[:60]}")
-            
-            self.log("   ⏳ Waiting for page to stabilize...")
-            time.sleep(3)
-            
-            try:
-                self.log("   🔎 Looking for video elements...")
-                # Wait for ANY video result with reduced timeout
-                WebDriverWait(self.driver, 20).until(
-                    EC.presence_of_element_located((By.CSS_SELECTOR, "a#video-title"))
+                # Run yt-dlp to get video URL
+                result = subprocess.run(
+                    [sys.executable, '-m', 'yt_dlp', 
+                     '--get-id', 
+                     '--no-warnings',
+                     '--no-playlist',
+                     search_query],
+                    capture_output=True,
+                    text=True,
+                    timeout=20
                 )
-                self.log("   ✅ Video elements found!")
                 
-                # Find all video links (simpler selector)
-                video_links = self.driver.find_elements(By.CSS_SELECTOR, "a#video-title")
-                self.log(f"   📋 Found {len(video_links)} video links")
-                
-                if not video_links:
-                    self.log("   ❌ No video links found")
-                    self.capture_screenshot("no_videos_found")
+                if result.returncode == 0 and result.stdout.strip():
+                    video_id = result.stdout.strip().split('\n')[0]
+                    video_url = f"https://www.youtube.com/watch?v={video_id}"
+                    self.log(f"   ✅ Found: {video_url}")
+                    return video_url
+                else:
+                    self.log(f"   ❌ No results found")
+                    if result.stderr:
+                        self.log(f"   Error: {result.stderr[:100]}")
                     return None
-                
-                # Get first non-shorts video
-                for i, link in enumerate(video_links[:5], 1):
-                    try:
-                        href = link.get_attribute('href')
-                        if not href or '/shorts/' in href:
-                            continue
-                        
-                        title = link.get_attribute('title') or "Unknown"
-                        self.log(f"   🎯 Video {i}: {title[:50]}...")
-                        
-                        # Extract video ID directly from href
-                        video_id = self.extract_video_id(href)
-                        if video_id:
-                            clean_url = f"https://www.youtube.com/watch?v={video_id}"
-                            self.log(f"   ✅ Selected: {clean_url}")
-                            return clean_url
-                    except Exception as e:
-                        self.log(f"   ⚠️ Skipping video {i}: {str(e)[:40]}")
-                        continue
-                
-                self.log("   ❌ No valid videos found in results")
-                self.capture_screenshot("no_valid_videos")
-                return None
-                        
-            except TimeoutException:
-                self.log("   ❌ TIMEOUT waiting for video results!")
-                self.capture_screenshot("timeout_waiting")
-                
-                # Try handling consent then retry once more
-                try:
-                    self.log("   🔄 Trying consent handling as last resort...")
-                    if self.handle_consent_if_present():
-                        time.sleep(2)
-                        return self.search_youtube(song_name, retry_attempt, max_retries)
-                except Exception:
-                    pass
-                
+                    
+            except subprocess.TimeoutExpired:
+                self.log("   ⏰ Search timeout (20s)")
                 if retry_attempt < max_retries:
-                    self.log(f"   🔄 Retrying search (attempt {retry_attempt + 2}/{max_retries + 1})...")
-                    time.sleep(5)
+                    time.sleep(2)
+                    return self.search_youtube(song_name, retry_attempt + 1, max_retries)
+                return None
+            except Exception as e:
+                self.log(f"   ❌ Search error: {str(e)[:100]}")
+                if retry_attempt < max_retries:
+                    time.sleep(2)
                     return self.search_youtube(song_name, retry_attempt + 1, max_retries)
                 return None
                 
         except Exception as e:
-            self.log(f"❌ EXCEPTION in search: {str(e)[:150]}")
-            self.capture_screenshot("search_exception")
+            self.log(f"❌ Unexpected error: {str(e)[:150]}")
             if retry_attempt < max_retries:
-                self.log(f"   🔄 Retrying after exception...")
-                time.sleep(5)
+                time.sleep(3)
                 return self.search_youtube(song_name, retry_attempt + 1, max_retries)
             return None
 
@@ -595,15 +544,9 @@ def process_in_background(songs):
     global downloader, download_progress
     
     try:
-        # Setup browser
-        if not downloader.setup_browser():
-            with progress_lock:
-                download_progress['status'] = 'error'
-            return
-        
         video_data = []
         
-        # Search for each song
+        # Search for each song (using yt-dlp, no browser needed!)
         for i, song in enumerate(songs, 1):
             with progress_lock:
                 download_progress['current_song'] = song
@@ -628,10 +571,7 @@ def process_in_background(songs):
                         'status': 'failed'
                     })
             
-            time.sleep(2)
-        
-        # Close browser
-        downloader.cleanup()
+            time.sleep(1)  # Small delay between searches
         
         # Download thumbnails and audio
         success_count = 0
@@ -648,9 +588,6 @@ def process_in_background(songs):
         with progress_lock:
             download_progress['status'] = 'error'
             download_progress['logs'].append(f"💥 Error: {str(e)}")
-    finally:
-        if downloader:
-            downloader.cleanup()
 
 @app.route('/api/progress')
 def get_progress():
