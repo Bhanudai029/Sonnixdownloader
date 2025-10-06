@@ -4,13 +4,25 @@ YouTube Song Search Web Interface
 Simple Flask app to search YouTube songs and get video URLs
 """
 
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, send_file
 import os
 import re
 import requests
 import time
+from pathlib import Path
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+import uuid
 
 app = Flask(__name__)
+
+# Create downloads folder for audio files
+DOWNLOADS_FOLDER = Path("downloaded_audios")
+DOWNLOADS_FOLDER.mkdir(parents=True, exist_ok=True)
 
 def parse_song_list(song_input):
     """Parse numbered song list from text input"""
@@ -108,6 +120,173 @@ def search_youtube_video(song_name, max_retries=2):
 def index():
     """Serve the main page"""
     return render_template('index_web.html')
+
+def setup_selenium_driver():
+    """Setup headless Chrome driver for Selenium"""
+    chrome_options = Options()
+    chrome_options.add_argument("--headless=new")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--window-size=1920,1080")
+    chrome_options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+    
+    # Set download directory
+    prefs = {
+        "download.default_directory": str(DOWNLOADS_FOLDER.absolute()),
+        "download.prompt_for_download": False,
+        "download.directory_upgrade": True,
+        "safebrowsing.enabled": True
+    }
+    chrome_options.add_experimental_prefs(prefs)
+    
+    try:
+        chromedriver_path = os.environ.get('CHROMEDRIVER_PATH', '/usr/bin/chromedriver')
+        chrome_binary_path = os.environ.get('CHROME_BIN', '/usr/bin/chromium-browser')
+        
+        if os.path.exists(chrome_binary_path):
+            chrome_options.binary_location = chrome_binary_path
+        
+        if os.path.exists(chromedriver_path):
+            service = Service(executable_path=chromedriver_path)
+            driver = webdriver.Chrome(service=service, options=chrome_options)
+        else:
+            driver = webdriver.Chrome(options=chrome_options)
+        
+        return driver
+    except Exception as e:
+        print(f"Error setting up Selenium driver: {e}")
+        return None
+
+@app.route('/api/download-audio', methods=['POST'])
+def download_audio():
+    """Download audio from YouTube via ezconv.com automation"""
+    try:
+        data = request.get_json()
+        youtube_url = data.get('youtube_url', '')
+        
+        if not youtube_url:
+            return jsonify({'success': False, 'message': 'No YouTube URL provided'})
+        
+        print(f"Starting audio download for: {youtube_url}")
+        
+        # Setup Selenium driver
+        driver = setup_selenium_driver()
+        if not driver:
+            return jsonify({'success': False, 'message': 'Failed to initialize browser'})
+        
+        try:
+            # Navigate to ezconv.com
+            print("Navigating to ezconv.com...")
+            driver.get("https://ezconv.com/v820")
+            time.sleep(2)
+            
+            # Find and fill the URL input field
+            print("Looking for URL input field...")
+            url_input = WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, "input[type='text']"))
+            )
+            url_input.clear()
+            url_input.send_keys(youtube_url)
+            print("YouTube URL pasted")
+            
+            # Find and click the Convert button using the XPath you provided
+            print("Looking for Convert button...")
+            convert_button = WebDriverWait(driver, 10).until(
+                EC.element_to_be_clickable((By.XPATH, "//button[@id=':R1ajalffata:']"))
+            )
+            convert_button.click()
+            print("Convert button clicked")
+            
+            # Wait 20 seconds for conversion
+            print("Waiting 20 seconds for conversion...")
+            time.sleep(20)
+            
+            # Look for Download MP3 button
+            print("Looking for Download MP3 button...")
+            try:
+                download_button = WebDriverWait(driver, 15).until(
+                    EC.element_to_be_clickable((By.XPATH, "//button[normalize-space()='Download MP3']"))
+                )
+                
+                # Get download link before clicking
+                download_link = download_button.get_attribute("href")
+                if not download_link:
+                    # Try to find download link in page
+                    download_links = driver.find_elements(By.CSS_SELECTOR, "a[href*='download'], a[download]")
+                    if download_links:
+                        download_link = download_links[0].get_attribute("href")
+                
+                print(f"Download button found, clicking...")
+                download_button.click()
+                time.sleep(2)
+                
+                # Try to get download URL from current page
+                current_url = driver.current_url
+                if 'download' in current_url.lower() or '.mp3' in current_url.lower():
+                    download_link = current_url
+                
+                if not download_link:
+                    # Look for download links on the page
+                    download_links = driver.find_elements(By.CSS_SELECTOR, "a[href*='download'], a[href*='.mp3']")
+                    if download_links:
+                        download_link = download_links[0].get_attribute("href")
+                
+                if download_link:
+                    print(f"Download link found: {download_link}")
+                    
+                    # Download the file using requests
+                    response = requests.get(download_link, stream=True, timeout=60)
+                    response.raise_for_status()
+                    
+                    # Generate unique filename
+                    filename = f"audio_{uuid.uuid4().hex[:8]}.mp3"
+                    filepath = DOWNLOADS_FOLDER / filename
+                    
+                    with open(filepath, 'wb') as f:
+                        for chunk in response.iter_content(chunk_size=8192):
+                            f.write(chunk)
+                    
+                    print(f"Audio downloaded successfully: {filename}")
+                    
+                    driver.quit()
+                    
+                    # Return the audio file URL
+                    return jsonify({
+                        'success': True,
+                        'audio_url': f'/audio/{filename}',
+                        'filename': filename
+                    })
+                else:
+                    driver.quit()
+                    return jsonify({'success': False, 'message': 'Could not find download link'})
+                    
+            except Exception as e:
+                print(f"Error finding download button: {str(e)}")
+                driver.quit()
+                return jsonify({'success': False, 'message': f'Download button not found: {str(e)[:100]}'})
+        
+        except Exception as e:
+            print(f"Error during automation: {str(e)}")
+            if driver:
+                driver.quit()
+            return jsonify({'success': False, 'message': f'Automation error: {str(e)[:100]}'})
+    
+    except Exception as e:
+        print(f"Error in download_audio: {str(e)}")
+        return jsonify({'success': False, 'message': f'Server error: {str(e)[:100]}'})
+
+@app.route('/audio/<filename>')
+def serve_audio(filename):
+    """Serve downloaded audio files"""
+    try:
+        filepath = DOWNLOADS_FOLDER / filename
+        if filepath.exists():
+            return send_file(filepath, mimetype='audio/mpeg')
+        else:
+            return jsonify({'error': 'File not found'}), 404
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/api/search', methods=['POST'])
 def search_songs():

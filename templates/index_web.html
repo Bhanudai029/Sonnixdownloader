@@ -10,7 +10,7 @@
             padding: 0;
             box-sizing: border-box;
         }
-
+        
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
             /* 2025 Trend: Mocha Mousse gradient with Soft Peach */
@@ -90,11 +90,11 @@
             font-size: 1.15rem;
             font-weight: 500;
         }
-
+        
         .input-section {
             margin-bottom: 30px;
         }
-
+        
         label {
             display: block;
             color: #4A3F37;
@@ -102,7 +102,7 @@
             margin-bottom: 12px;
             font-size: 1.1rem;
         }
-
+        
         .example {
             background: linear-gradient(135deg, rgba(184, 161, 216, 0.1) 0%, rgba(245, 230, 211, 0.2) 100%);
             border-left: 4px solid #B8A1D8;
@@ -141,7 +141,7 @@
             gap: 12px;
             margin-bottom: 30px;
         }
-
+        
         button {
             flex: 1;
             padding: 16px 32px;
@@ -154,14 +154,14 @@
             position: relative;
             overflow: hidden;
         }
-
+        
         .search-btn {
             /* 2025 Trend: Digital Lavender to Mocha gradient */
             background: linear-gradient(135deg, #B8A1D8 0%, #A6877D 100%);
             color: white;
             box-shadow: 0 6px 20px rgba(184, 161, 216, 0.3);
         }
-
+        
         .search-btn::before {
             content: '';
             position: absolute;
@@ -191,7 +191,7 @@
             opacity: 0.6;
             cursor: not-allowed;
         }
-
+        
         .clear-btn {
             background: rgba(166, 135, 125, 0.1);
             color: #6B5B52;
@@ -203,7 +203,7 @@
             border-color: rgba(166, 135, 125, 0.3);
             transform: translateY(-2px);
         }
-
+        
         .status {
             text-align: center;
             padding: 16px;
@@ -258,7 +258,7 @@
             text-align: center;
             box-shadow: 0 8px 25px rgba(184, 161, 216, 0.3);
         }
-
+        
         .result-item {
             background: linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(245, 230, 211, 0.3) 100%);
             border-left: 4px solid #B8A1D8;
@@ -274,7 +274,7 @@
             box-shadow: 0 8px 25px rgba(184, 161, 216, 0.2);
             border-left-color: #C9B3E8;
         }
-
+        
         .result-item.failed {
             border-left-color: #E89999;
             opacity: 0.75;
@@ -327,7 +327,7 @@
             color: #C86666;
             font-weight: 600;
         }
-
+        
         .spinner {
             display: inline-block;
             width: 20px;
@@ -337,9 +337,241 @@
             border-top-color: white;
             animation: spin 1s ease-in-out infinite;
         }
-
+        
         @keyframes spin {
             to { transform: rotate(360deg); }
+        }
+        
+        /* Audio Downloader Icon */
+        .audio-downloader-icon {
+            position: fixed;
+            top: 30px;
+            right: 30px;
+            width: 60px;
+            height: 60px;
+            background: linear-gradient(135deg, #B8A1D8 0%, #A6877D 100%);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 6px 20px rgba(184, 161, 216, 0.4);
+            transition: all 0.3s ease;
+            z-index: 1000;
+            color: white;
+        }
+
+        .audio-downloader-icon:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 12px 30px rgba(184, 161, 216, 0.5);
+        }
+
+        /* Audio Downloader Modal */
+        .audio-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(5px);
+            z-index: 2000;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .audio-modal.show {
+            display: flex;
+            animation: fadeIn 0.3s ease-out;
+        }
+
+        .audio-modal-content {
+            background: rgba(255, 255, 255, 0.98);
+            backdrop-filter: blur(20px);
+            border-radius: 24px;
+            padding: 40px;
+            max-width: 600px;
+            width: 100%;
+            box-shadow: 0 25px 70px rgba(166, 135, 125, 0.3);
+            position: relative;
+            animation: slideUp 0.3s ease-out;
+        }
+
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .modal-close {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 35px;
+            height: 35px;
+            border-radius: 50%;
+            background: rgba(166, 135, 125, 0.1);
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+            color: #6B5B52;
+            font-size: 24px;
+        }
+
+        .modal-close:hover {
+            background: rgba(166, 135, 125, 0.2);
+            transform: rotate(90deg);
+        }
+
+        .modal-title {
+            background: linear-gradient(135deg, #B8A1D8 0%, #A6877D 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            font-size: 2rem;
+            margin-bottom: 10px;
+            font-weight: 700;
+        }
+
+        .modal-subtitle {
+            color: #6B5B52;
+            margin-bottom: 25px;
+            font-size: 1rem;
+        }
+
+        .url-input-group {
+            margin-bottom: 20px;
+        }
+
+        .url-input-group label {
+            display: block;
+            color: #4A3F37;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+
+        .url-input-group input {
+            width: 100%;
+            padding: 15px;
+            border: 2px solid rgba(166, 135, 125, 0.2);
+            border-radius: 12px;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+            background: rgba(255, 255, 255, 0.8);
+            color: #4A3F37;
+        }
+
+        .url-input-group input:focus {
+            outline: none;
+            border-color: #B8A1D8;
+            box-shadow: 0 0 0 4px rgba(184, 161, 216, 0.1);
+            background: rgba(255, 255, 255, 1);
+        }
+
+        .download-audio-btn {
+            width: 100%;
+            padding: 16px 32px;
+            border: none;
+            border-radius: 14px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            background: linear-gradient(135deg, #B8A1D8 0%, #A6877D 100%);
+            color: white;
+            box-shadow: 0 6px 20px rgba(184, 161, 216, 0.3);
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .download-audio-btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #C9B3E8 0%, #B89987 100%);
+            transition: left 0.3s ease;
+        }
+
+        .download-audio-btn:hover:not(:disabled)::before {
+            left: 0;
+        }
+
+        .download-audio-btn:hover:not(:disabled) {
+            transform: translateY(-3px);
+            box-shadow: 0 12px 30px rgba(184, 161, 216, 0.4);
+        }
+
+        .download-audio-btn span {
+            position: relative;
+            z-index: 1;
+        }
+
+        .download-audio-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .audio-status {
+            text-align: center;
+            padding: 12px;
+            border-radius: 10px;
+            margin-top: 15px;
+            font-weight: 600;
+            display: none;
+        }
+
+        .audio-status.show {
+            display: block;
+        }
+
+        .audio-status.success {
+            background: linear-gradient(135deg, rgba(76, 175, 80, 0.15) 0%, rgba(184, 161, 216, 0.1) 100%);
+            color: #2D5F2E;
+            border: 2px solid rgba(76, 175, 80, 0.3);
+        }
+
+        .audio-status.error {
+            background: linear-gradient(135deg, rgba(244, 67, 54, 0.15) 0%, rgba(166, 135, 125, 0.1) 100%);
+            color: #8B3A3A;
+            border: 2px solid rgba(244, 67, 54, 0.3);
+        }
+
+        .audio-status.loading {
+            background: linear-gradient(135deg, rgba(255, 193, 7, 0.15) 0%, rgba(245, 230, 211, 0.2) 100%);
+            color: #8B6B00;
+            border: 2px solid rgba(255, 193, 7, 0.3);
+        }
+
+        .audio-player-container {
+            margin-top: 20px;
+            padding: 20px;
+            background: linear-gradient(135deg, rgba(184, 161, 216, 0.1) 0%, rgba(245, 230, 211, 0.2) 100%);
+            border-radius: 16px;
+            display: none;
+        }
+
+        .audio-player-container.show {
+            display: block;
+            animation: fadeIn 0.5s ease-out;
+        }
+
+        .audio-player-container audio {
+            width: 100%;
+            margin-top: 10px;
+            border-radius: 10px;
+        }
+
+        .audio-info {
+            color: #4A3F37;
+            font-weight: 600;
+            margin-bottom: 10px;
         }
 
         @media (max-width: 600px) {
@@ -366,47 +598,102 @@
                 height: 30px;
                 line-height: 30px;
             }
+
+            .audio-downloader-icon {
+                top: 20px;
+                right: 20px;
+                width: 50px;
+                height: 50px;
+            }
+
+            .audio-modal-content {
+                padding: 25px;
+                margin: 10px;
+            }
+
+            .modal-title {
+                font-size: 1.5rem;
+            }
         }
     </style>
 </head>
 <body>
+    <!-- Audio Downloader Icon -->
+    <div class="audio-downloader-icon" onclick="openAudioDownloader()" title="YouTube Audio Downloader">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="7 10 12 15 17 10"></polyline>
+            <line x1="12" y1="15" x2="12" y2="3"></line>
+        </svg>
+        </div>
+        
     <div class="container">
         <h1>🎵 YouTube Song Search</h1>
         <p class="subtitle">Find long-form video URLs for your favorite songs</p>
-
-        <div class="input-section">
+            
+            <div class="input-section">
             <label for="songInput">Enter Song List (numbered format):</label>
-            <div class="example">
+                <div class="example">
                 Example:<br>
                 1. Shape of You<br>
                 2. See You Again<br>
                 3. Dream
-            </div>
-            <textarea 
+                </div>
+                <textarea 
                 id="songInput" 
                 placeholder="Paste your numbered song list here...&#10;&#10;1. Shape of You&#10;2. See You Again&#10;3. Dream"
-            ></textarea>
+                ></textarea>
         </div>
 
         <div class="button-container">
             <button class="search-btn" id="searchBtn" onclick="searchSongs()">
                 <span>Search YouTube</span>
-            </button>
+                    </button>
             <button class="clear-btn" onclick="clearAll()">
                 <span>Clear</span>
-            </button>
-        </div>
-
+                    </button>
+            </div>
+            
         <div id="status" class="status"></div>
 
         <div id="results" class="results">
             <div class="results-header">
                 <h2 id="resultsTitle">Search Results</h2>
-            </div>
+                </div>
             <div id="resultsContainer"></div>
+            </div>
+                    </div>
+
+    <!-- Audio Downloader Modal -->
+    <div id="audioModal" class="audio-modal">
+        <div class="audio-modal-content">
+            <button class="modal-close" onclick="closeAudioDownloader()">×</button>
+            
+            <h2 class="modal-title">🎵 YouTube Audio Downloader</h2>
+            <p class="modal-subtitle">Paste a YouTube video URL to download and play audio</p>
+
+            <div class="url-input-group">
+                <label for="youtubeUrl">YouTube Video URL:</label>
+                <input 
+                    type="text" 
+                    id="youtubeUrl" 
+                    placeholder="https://www.youtube.com/watch?v=..."
+                >
+        </div>
+        
+            <button class="download-audio-btn" id="downloadAudioBtn" onclick="downloadAudio()">
+                <span>Download Audio</span>
+            </button>
+
+            <div id="audioStatus" class="audio-status"></div>
+
+            <div id="audioPlayerContainer" class="audio-player-container">
+                <div class="audio-info">✅ Audio Ready to Play:</div>
+                <audio id="audioPlayer" controls></audio>
+            </div>
         </div>
     </div>
-
+    
     <script>
         async function searchSongs() {
             const songInput = document.getElementById('songInput').value;
@@ -420,7 +707,7 @@
                 showStatus('error', 'Please enter at least one song!');
                 return;
             }
-
+            
             // Disable button and show loading
             searchBtn.disabled = true;
             searchBtn.innerHTML = '<span><span class="spinner"></span> Searching...</span>';
@@ -437,9 +724,9 @@
                         songs: songInput
                     })
                 });
-
+                
                 const data = await response.json();
-
+                
                 if (data.success) {
                     showStatus('success', `Found ${data.results.filter(r => r.status === 'success').length} out of ${data.total} songs!`);
                     displayResults(data.results);
@@ -511,6 +798,87 @@
                 searchSongs();
             }
         });
+
+        // Audio Downloader Modal Functions
+        function openAudioDownloader() {
+            document.getElementById('audioModal').classList.add('show');
+        }
+
+        function closeAudioDownloader() {
+            document.getElementById('audioModal').classList.remove('show');
+            // Reset form
+            document.getElementById('youtubeUrl').value = '';
+            document.getElementById('audioStatus').className = 'audio-status';
+            document.getElementById('audioPlayerContainer').classList.remove('show');
+        }
+
+        // Close modal when clicking outside
+        document.getElementById('audioModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeAudioDownloader();
+            }
+        });
+
+        async function downloadAudio() {
+            const youtubeUrl = document.getElementById('youtubeUrl').value.trim();
+            const downloadBtn = document.getElementById('downloadAudioBtn');
+            const audioStatus = document.getElementById('audioStatus');
+            const audioPlayerContainer = document.getElementById('audioPlayerContainer');
+            const audioPlayer = document.getElementById('audioPlayer');
+
+            if (!youtubeUrl) {
+                showAudioStatus('error', 'Please enter a YouTube URL!');
+                return;
+            }
+
+            // Validate YouTube URL
+            if (!youtubeUrl.includes('youtube.com') && !youtubeUrl.includes('youtu.be')) {
+                showAudioStatus('error', 'Invalid YouTube URL!');
+                return;
+            }
+
+            // Disable button and show loading
+            downloadBtn.disabled = true;
+            downloadBtn.innerHTML = '<span><span class="spinner"></span> Processing...</span>';
+            audioPlayerContainer.classList.remove('show');
+            showAudioStatus('loading', 'Connecting to ezconv.com...');
+
+            try {
+                const response = await fetch('/api/download-audio', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        youtube_url: youtubeUrl
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showAudioStatus('success', 'Audio downloaded successfully!');
+                    
+                    // Load audio into player
+                    audioPlayer.src = data.audio_url;
+                    audioPlayerContainer.classList.add('show');
+                } else {
+                    showAudioStatus('error', data.message || 'Download failed!');
+                }
+            } catch (error) {
+                showAudioStatus('error', 'Network error! Please try again.');
+                console.error('Error:', error);
+            } finally {
+                downloadBtn.disabled = false;
+                downloadBtn.innerHTML = '<span>Download Audio</span>';
+            }
+        }
+
+        function showAudioStatus(type, message) {
+            const audioStatus = document.getElementById('audioStatus');
+            audioStatus.className = `audio-status ${type} show`;
+            audioStatus.textContent = message;
+        }
     </script>
 </body>
 </html>
