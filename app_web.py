@@ -26,42 +26,42 @@ DOWNLOADS_FOLDER.mkdir(parents=True, exist_ok=True)
 
 def parse_song_list(song_input):
     """Parse numbered song list from text input"""
-        songs = []
-        
-        if not song_input or not song_input.strip():
-            return songs
-        
-        buffer = song_input.strip()
-        
-    # Handle single line with all songs (e.g., "1. A2. B3. C")
-        if '\n' not in buffer and re.search(r'\d+\.\s*\w', buffer):
-            parts = re.findall(r'(\d+\.)\s*([^0-9]*?)(?=\d+\.|$)', buffer)
-            if parts:
-                for _, title in parts:
-                    song_name = re.sub(r"\s+", " ", title.strip())
-                    if song_name:
-                        songs.append(song_name)
-        else:
-        # Handle multi-line input
-            numbered_item_regex = re.compile(r"\b(\d+)\.\s*([^\d].*?)(?=\s*\d+\.|$)", re.DOTALL)
-            matches = numbered_item_regex.findall(buffer)
-            
-            if matches:
-                for _, title in matches:
-                    song_name = re.sub(r"\s+", " ", title.strip())
-                    if song_name:
-                        songs.append(song_name)
-            else:
-                # Fallback: parse per-line
-                line_regex = re.compile(r"^\s*\d+\.\s*(.+)$")
-                for raw in buffer.splitlines():
-                    m = line_regex.match(raw.strip())
-                    if m:
-                        song_name = re.sub(r"\s+", " ", m.group(1).strip())
-                        if song_name:
-                            songs.append(song_name)
-        
+    songs = []
+    
+    if not song_input or not song_input.strip():
         return songs
+    
+    buffer = song_input.strip()
+    
+    # Handle single line with all songs (e.g., "1. A2. B3. C")
+    if '\n' not in buffer and re.search(r'\d+\.\s*\w', buffer):
+        parts = re.findall(r'(\d+\.)\s*([^0-9]*?)(?=\d+\.|$)', buffer)
+        if parts:
+            for _, title in parts:
+                song_name = re.sub(r"\s+", " ", title.strip())
+                if song_name:
+                    songs.append(song_name)
+    else:
+        # Handle multi-line input
+        numbered_item_regex = re.compile(r"\b(\d+)\.\s*([^\d].*?)(?=\s*\d+\.|$)", re.DOTALL)
+        matches = numbered_item_regex.findall(buffer)
+        
+        if matches:
+            for _, title in matches:
+                song_name = re.sub(r"\s+", " ", title.strip())
+                if song_name:
+                    songs.append(song_name)
+        else:
+            # Fallback: parse per-line
+            line_regex = re.compile(r"^\s*\d+\.\s*(.+)$")
+            for raw in buffer.splitlines():
+                m = line_regex.match(raw.strip())
+                if m:
+                    song_name = re.sub(r"\s+", " ", m.group(1).strip())
+                    if song_name:
+                        songs.append(song_name)
+    
+    return songs
 
 def is_shorts_url(video_id, html_content):
     """Check if video ID belongs to a shorts video"""
