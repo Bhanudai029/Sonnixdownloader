@@ -21,8 +21,29 @@ import threading
 import gc
 import weakref
 from contextlib import contextmanager
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 app = Flask(__name__)
+
+# Create a global session with connection pooling and retry logic
+_http_session = None
+
+def get_http_session():
+    """Get or create a shared HTTP session with retry logic."""
+    global _http_session
+    if _http_session is None:
+        _http_session = requests.Session()
+        retry_strategy = Retry(
+            total=2,
+            backoff_factor=0.5,
+            status_forcelist=[429, 500, 502, 503, 504],
+            allowed_methods=["GET", "POST"]
+        )
+        adapter = HTTPAdapter(max_retries=retry_strategy, pool_connections=10, pool_maxsize=20)
+        _http_session.mount("http://", adapter)
+        _http_session.mount("https://", adapter)
+    return _http_session
 
 # Create data folders
 DOWNLOADS_FOLDER = Path("downloaded_audios")
@@ -106,12 +127,16 @@ def search_youtube_video(song_name: str, max_retries: int = 2) -> str | None:
             "Accept-Language": "en-US,en;q=0.9",
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
         }
-        response = requests.get(search_url, headers=headers, timeout=15)
+        # Use session with connection pooling and shorter timeout
+        session = get_http_session()
+        response = session.get(search_url, headers=headers, timeout=8)
         if response.status_code != 200:
+            print(f"YouTube search failed with status {response.status_code}")
             return None
         video_id_pattern = r'"videoId":"([a-zA-Z0-9_-]{11})"'
         matches = re.findall(video_id_pattern, response.text)
         if not matches:
+            print(f"No video IDs found for: {song_name}")
             return None
         for video_id in matches[:15]:
             if f"/shorts/{video_id}" in response.text:
@@ -120,6 +145,10 @@ def search_youtube_video(song_name: str, max_retries: int = 2) -> str | None:
                 return f"https://www.youtube.com/watch?v={video_id}"
         return None
     except requests.Timeout:
+        print(f"Timeout searching for: {song_name}")
+        return None
+    except requests.ConnectionError as e:
+        print(f"Connection error for {song_name}: {str(e)[:100]}")
         return None
     except Exception as e:
         print(f"Error searching for {song_name}: {str(e)[:100]}")
