@@ -131,14 +131,14 @@ def setup_selenium_driver():
     chrome_options.add_argument("--window-size=1920,1080")
     chrome_options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
     
-    # Set download directory
+    # Set download directory preferences (use add_experimental_option, not add_experimental_prefs)
     prefs = {
         "download.default_directory": str(DOWNLOADS_FOLDER.absolute()),
         "download.prompt_for_download": False,
         "download.directory_upgrade": True,
         "safebrowsing.enabled": True
     }
-    chrome_options.add_experimental_prefs(prefs)
+    chrome_options.add_experimental_option("prefs", prefs)
     
     try:
         chromedriver_path = os.environ.get('CHROMEDRIVER_PATH', '/usr/bin/chromedriver')
