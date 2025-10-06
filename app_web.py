@@ -74,29 +74,29 @@ def search_youtube_video(song_name, max_retries=2):
     """Search YouTube for a song and return long-form video URL"""
     try:
         # Format search query
-            search_query = song_name.replace(' ', '+')
-            search_url = f"https://www.youtube.com/results?search_query={search_query}"
-            
-                headers = {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
-                    'Accept-Language': 'en-US,en;q=0.9',
+        search_query = song_name.replace(' ', '+')
+        search_url = f"https://www.youtube.com/results?search_query={search_query}"
+        
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+            'Accept-Language': 'en-US,en;q=0.9',
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                }
-                
+        }
+        
         # Make HTTP request to YouTube search
-                response = requests.get(search_url, headers=headers, timeout=15)
-                
-                if response.status_code != 200:
-                    return None
-                
+        response = requests.get(search_url, headers=headers, timeout=15)
+        
+        if response.status_code != 200:
+            return None
+        
         # Extract video IDs from HTML
         # Pattern: "videoId":"VIDEO_ID"
-                video_id_pattern = r'"videoId":"([a-zA-Z0-9_-]{11})"'
-                matches = re.findall(video_id_pattern, response.text)
-                
-                if not matches:
-                    return None
-                
+        video_id_pattern = r'"videoId":"([a-zA-Z0-9_-]{11})"'
+        matches = re.findall(video_id_pattern, response.text)
+        
+        if not matches:
+            return None
+        
         # Filter out shorts and get first valid long-form video
         for video_id in matches[:15]:  # Check first 15 results
             # Check if this is a shorts video
@@ -105,17 +105,17 @@ def search_youtube_video(song_name, max_retries=2):
             
             # Valid long-form video found
             if len(video_id) == 11:
-                        video_url = f"https://www.youtube.com/watch?v={video_id}"
-                        return video_url
-                
-                return None
-                    
-            except requests.Timeout:
-                return None
-            except Exception as e:
+                video_url = f"https://www.youtube.com/watch?v={video_id}"
+                return video_url
+        
+        return None
+        
+    except requests.Timeout:
+        return None
+    except Exception as e:
         print(f"Error searching for {song_name}: {str(e)[:100]}")
-                return None
-                
+        return None
+
 @app.route('/')
 def index():
     """Serve the main page"""
@@ -123,13 +123,13 @@ def index():
 
 def setup_selenium_driver():
     """Setup headless Chrome driver for Selenium"""
-                chrome_options = Options()
+    chrome_options = Options()
     chrome_options.add_argument("--headless=new")
-                chrome_options.add_argument("--no-sandbox")
-                chrome_options.add_argument("--disable-dev-shm-usage")
-                chrome_options.add_argument("--disable-gpu")
-                chrome_options.add_argument("--window-size=1920,1080")
-                chrome_options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--window-size=1920,1080")
+    chrome_options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
 
     # Set download directory preferences (use add_experimental_option, not add_experimental_prefs)
     prefs = {
@@ -151,7 +151,7 @@ def setup_selenium_driver():
             service = Service(executable_path=chromedriver_path)
             driver = webdriver.Chrome(service=service, options=chrome_options)
         else:
-                driver = webdriver.Chrome(options=chrome_options)
+            driver = webdriver.Chrome(options=chrome_options)
 
         return driver
     except Exception as e:
@@ -178,14 +178,14 @@ def download_audio():
         try:
             # Navigate to ezconv.com
             print("Navigating to ezconv.com...")
-                    driver.get("https://ezconv.com/v820")
+            driver.get("https://ezconv.com/v820")
             time.sleep(2)
             
             # Find and fill the URL input field
             print("Looking for URL input field...")
             url_input = WebDriverWait(driver, 10).until(
-                        EC.presence_of_element_located((By.CSS_SELECTOR, "input[type='text']"))
-                    )
+                EC.presence_of_element_located((By.CSS_SELECTOR, "input[type='text']"))
+            )
             url_input.clear()
             url_input.send_keys(youtube_url)
             print("YouTube URL pasted")
@@ -223,12 +223,12 @@ def download_audio():
                     return jsonify({'success': False, 'message': f'Conversion timeout after {max_wait_time} seconds'})
                 
                 # Wait a bit more to ensure it's clickable
-                        time.sleep(1)
+                time.sleep(1)
                 
                 # Try to make it clickable
                 download_button = WebDriverWait(driver, 10).until(
-                            EC.element_to_be_clickable((By.XPATH, "//button[normalize-space()='Download MP3']"))
-                        )
+                    EC.element_to_be_clickable((By.XPATH, "//button[normalize-space()='Download MP3']"))
+                )
                 
                 print(f"Download button is clickable, getting download link...")
                 
@@ -262,10 +262,10 @@ def download_audio():
                 time.sleep(2)
                 
                 # Try to get download URL from current page
-                    current_url = driver.current_url
+                current_url = driver.current_url
                 print(f"Current URL after click: {current_url}")
 
-                    if 'download' in current_url.lower() or '.mp3' in current_url.lower():
+                if 'download' in current_url.lower() or '.mp3' in current_url.lower():
                     download_link = current_url
                     print(f"Download link from redirect: {download_link}")
                 
@@ -273,7 +273,7 @@ def download_audio():
                     # Look for download links on the page
                     print("Looking for download links on page...")
                     download_links = driver.find_elements(By.CSS_SELECTOR, "a[href*='download'], a[href*='.mp3'], a[download]")
-                            if download_links:
+                    if download_links:
                         download_link = download_links[0].get_attribute("href")
                         print(f"Found download link: {download_link}")
                 
@@ -335,7 +335,7 @@ def download_audio():
                 driver.quit()
             return jsonify({'success': False, 'message': f'Automation error: {str(e)[:100]}'})
 
-        except Exception as e:
+    except Exception as e:
         print(f"Error in download_audio: {str(e)}")
         return jsonify({'success': False, 'message': f'Server error: {str(e)[:100]}'})
 
@@ -376,8 +376,8 @@ def search_songs():
             
             results.append({
                 'number': i,
-                        'song': song,
-                        'url': video_url,
+                'song': song,
+                'url': video_url,
                 'status': 'success' if video_url else 'failed'
             })
             
@@ -400,4 +400,3 @@ def search_songs():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
-
