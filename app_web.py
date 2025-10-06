@@ -18,6 +18,9 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import uuid
 import threading
+import gc
+import weakref
+from contextlib import contextmanager
 
 app = Flask(__name__)
 
@@ -31,43 +34,68 @@ ENABLE_EZCONV_DEBUG = os.environ.get("ENABLE_EZCONV_DEBUG", "0") == "1"
 # Limit concurrency to reduce memory pressure
 _download_lock = threading.Lock()
 
+# Memory optimization: Use weak references for temporary objects
+_active_drivers = weakref.WeakSet()
+
+@contextmanager
+def memory_efficient_context():
+    """Context manager for memory-efficient operations."""
+    try:
+        yield
+    finally:
+        # Force garbage collection after operations
+        gc.collect()
+
+def cleanup_memory():
+    """Aggressive memory cleanup."""
+    # Close any remaining drivers
+    for driver in list(_active_drivers):
+        try:
+            driver.quit()
+                    except Exception:
+            pass
+    _active_drivers.clear()
+    
+    # Force garbage collection
+    gc.collect()
+
 def parse_song_list(song_input: str) -> list[str]:
     """Parse numbered song list from text input."""
     songs: list[str] = []
-
-    if not song_input or not song_input.strip():
-        return songs
-
-    buffer = song_input.strip()
-
+        
+        if not song_input or not song_input.strip():
+            return songs
+        
+        buffer = song_input.strip()
+        
     # Handle single line with all songs (e.g., "1. A2. B3. C")
     if "\n" not in buffer and re.search(r"\d+\.\s*\w", buffer):
         parts = re.findall(r"(\d+\.)\s*([^0-9]*?)(?=\d+\.|$)", buffer)
-        if parts:
-            for _, title in parts:
-                song_name = re.sub(r"\s+", " ", title.strip())
-                if song_name:
-                    songs.append(song_name)
-    else:
-        # Handle multi-line input
-        numbered_item_regex = re.compile(r"\b(\d+)\.\s*([^\d].*?)(?=\s*\d+\.|$)", re.DOTALL)
-        matches = numbered_item_regex.findall(buffer)
-        if matches:
-            for _, title in matches:
-                song_name = re.sub(r"\s+", " ", title.strip())
-                if song_name:
-                    songs.append(song_name)
-        else:
-            # Fallback: parse per-line
-            line_regex = re.compile(r"^\s*\d+\.\s*(.+)$")
-            for raw in buffer.splitlines():
-                m = line_regex.match(raw.strip())
-                if m:
-                    song_name = re.sub(r"\s+", " ", m.group(1).strip())
+            if parts:
+                for _, title in parts:
+                    song_name = re.sub(r"\s+", " ", title.strip())
                     if song_name:
                         songs.append(song_name)
-
-    return songs
+        else:
+        # Handle multi-line input
+            numbered_item_regex = re.compile(r"\b(\d+)\.\s*([^\d].*?)(?=\s*\d+\.|$)", re.DOTALL)
+            matches = numbered_item_regex.findall(buffer)
+            if matches:
+                for _, title in matches:
+                    song_name = re.sub(r"\s+", " ", title.strip())
+                    if song_name:
+                        songs.append(song_name)
+            else:
+                # Fallback: parse per-line
+                line_regex = re.compile(r"^\s*\d+\.\s*(.+)$")
+                for raw in buffer.splitlines():
+                    m = line_regex.match(raw.strip())
+                    if m:
+                        song_name = re.sub(r"\s+", " ", m.group(1).strip())
+                        if song_name:
+                            songs.append(song_name)
+        
+        return songs
 
 def is_shorts_url(video_id: str, html_content: str) -> bool:
     """Check if video ID belongs to a shorts video by looking for '/shorts/VIDEOID' in HTML."""
@@ -77,48 +105,72 @@ def search_youtube_video(song_name: str, max_retries: int = 2) -> str | None:
     """Search YouTube for a song and return long-form video URL."""
     try:
         search_query = song_name.replace(" ", "+")
-        search_url = f"https://www.youtube.com/results?search_query={search_query}"
-
-        headers = {
+            search_url = f"https://www.youtube.com/results?search_query={search_query}"
+            
+                headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
             "Accept-Language": "en-US,en;q=0.9",
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-        }
-
-        response = requests.get(search_url, headers=headers, timeout=15)
-        if response.status_code != 200:
-            return None
-
-        video_id_pattern = r'"videoId":"([a-zA-Z0-9_-]{11})"'
-        matches = re.findall(video_id_pattern, response.text)
-        if not matches:
-            return None
-
+                }
+                
+                response = requests.get(search_url, headers=headers, timeout=15)
+                if response.status_code != 200:
+                    return None
+                
+                video_id_pattern = r'"videoId":"([a-zA-Z0-9_-]{11})"'
+                matches = re.findall(video_id_pattern, response.text)
+                if not matches:
+                    return None
+                
         for video_id in matches[:15]:
             if f"/shorts/{video_id}" in response.text:
                 continue
             if len(video_id) == 11:
                 return f"https://www.youtube.com/watch?v={video_id}"
-        return None
-    except requests.Timeout:
-        return None
-    except Exception as e:
+                return None
+            except requests.Timeout:
+                return None
+            except Exception as e:
         print(f"Error searching for {song_name}: {str(e)[:100]}")
-        return None
-
+                return None
+                
 @app.route("/")
 def index():
     return render_template("index_web.html")
 
 def setup_selenium_driver():
-    """Setup headless Chrome driver for Selenium."""
+    """Setup headless Chrome driver for Selenium with aggressive memory optimization."""
     chrome_options = Options()
     chrome_options.add_argument("--headless=new")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--disable-gpu")
-    chrome_options.add_argument("--window-size=1280,800")
+    chrome_options.add_argument("--window-size=1024,768")  # Smaller window
     chrome_options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+
+    # Aggressive memory optimization flags
+    chrome_options.add_argument("--memory-pressure-off")
+    chrome_options.add_argument("--max_old_space_size=512")  # Limit V8 heap
+    chrome_options.add_argument("--disable-background-timer-throttling")
+    chrome_options.add_argument("--disable-renderer-backgrounding")
+    chrome_options.add_argument("--disable-backgrounding-occluded-windows")
+    chrome_options.add_argument("--disable-features=TranslateUI")
+    chrome_options.add_argument("--disable-ipc-flooding-protection")
+    chrome_options.add_argument("--disable-background-networking")
+    chrome_options.add_argument("--disable-default-apps")
+    chrome_options.add_argument("--disable-extensions")
+    chrome_options.add_argument("--disable-sync")
+    chrome_options.add_argument("--disable-translate")
+    chrome_options.add_argument("--hide-scrollbars")
+    chrome_options.add_argument("--mute-audio")
+    chrome_options.add_argument("--no-first-run")
+    chrome_options.add_argument("--disable-logging")
+    chrome_options.add_argument("--disable-permissions-api")
+    chrome_options.add_argument("--disable-plugins")
+    chrome_options.add_argument("--disable-web-security")
+    chrome_options.add_argument("--disable-features=VizDisplayCompositor")
+    chrome_options.add_argument("--single-process")  # Single process mode for lower memory
+    chrome_options.add_argument("--no-zygote")  # Disable zygote process
 
     # Light anti-automation adjustments
     try:
@@ -138,17 +190,55 @@ def setup_selenium_driver():
         # Block notifications/popups where possible
         "profile.default_content_setting_values.notifications": 2,
         "profile.default_content_setting_values.popups": 2,
+        # Additional memory optimizations
+        "profile.default_content_setting_values.plugins": 2,
+        "profile.default_content_setting_values.geolocation": 2,
+        "profile.default_content_setting_values.media_stream": 2,
+        "profile.default_content_setting_values.automatic_downloads": 2,
+        "profile.default_content_setting_values.midi_sysex": 2,
+        "profile.default_content_setting_values.push_messaging": 2,
+        "profile.default_content_setting_values.mixed_script": 2,
+        "profile.default_content_setting_values.unsandboxed_plugins": 2,
+        "profile.default_content_setting_values.ppapi_broker": 2,
+        # Disable hardware acceleration
+        "hardware_acceleration_mode": 0,
+        # Reduce memory usage
+        "profile.content_settings.exceptions.automatic_downloads": {},
+        "profile.content_settings.exceptions.notifications": {},
+        "profile.content_settings.exceptions.geolocation": {},
+        "profile.content_settings.exceptions.media_stream": {},
     }
     chrome_options.add_experimental_option("prefs", prefs)
 
-    # Extra memory/perf flags
-    chrome_options.add_argument("--disable-extensions")
-    chrome_options.add_argument("--disable-background-networking")
-    chrome_options.add_argument("--disable-sync")
-    chrome_options.add_argument("--mute-audio")
+    # Additional memory/perf flags
     chrome_options.add_argument("--blink-settings=imagesEnabled=false")
     chrome_options.add_argument("--media-cache-size=0")
     chrome_options.add_argument("--disk-cache-size=0")
+    chrome_options.add_argument("--aggressive-cache-discard")
+    chrome_options.add_argument("--enable-low-res-tiling")
+    chrome_options.add_argument("--disable-background-mode")
+    chrome_options.add_argument("--disable-client-side-phishing-detection")
+    chrome_options.add_argument("--disable-component-update")
+    chrome_options.add_argument("--disable-domain-reliability")
+    chrome_options.add_argument("--disable-features=AudioServiceOutOfProcess")
+    chrome_options.add_argument("--disable-hang-monitor")
+    chrome_options.add_argument("--disable-prompt-on-repost")
+    chrome_options.add_argument("--disable-rtc-smoothness-algorithm")
+    chrome_options.add_argument("--disable-speech-api")
+    chrome_options.add_argument("--disable-speech-synthesis-api")
+    chrome_options.add_argument("--disable-webgl")
+    chrome_options.add_argument("--disable-webgl2")
+    chrome_options.add_argument("--force-color-profile=srgb")
+    chrome_options.add_argument("--metrics-recording-only")
+    chrome_options.add_argument("--no-default-browser-check")
+    chrome_options.add_argument("--no-pings")
+    chrome_options.add_argument("--no-service-autorun")
+    chrome_options.add_argument("--password-store=basic")
+    chrome_options.add_argument("--use-mock-keychain")
+    chrome_options.add_argument("--disable-component-extensions-with-background-pages")
+    chrome_options.add_argument("--disable-background-timer-throttling")
+    chrome_options.add_argument("--disable-renderer-backgrounding")
+    chrome_options.add_argument("--disable-backgrounding-occluded-windows")
 
     try:
         chromedriver_path = os.environ.get("CHROMEDRIVER_PATH", "/usr/bin/chromedriver")
@@ -162,11 +252,15 @@ def setup_selenium_driver():
             driver = webdriver.Chrome(service=service, options=chrome_options)
         else:
             driver = webdriver.Chrome(options=chrome_options)
+        
+        # Track driver for cleanup
+        _active_drivers.add(driver)
         return driver
     except Exception as e:
         print(f"Error setting up Selenium driver: {e}")
-        return None
-
+        cleanup_memory()  # Cleanup on error
+            return None
+            
 def save_debug(driver, debug_dir: Path, label: str) -> None:
     """Save page HTML and screenshot for debugging."""
     if not ENABLE_EZCONV_DEBUG:
@@ -183,7 +277,7 @@ def save_debug(driver, debug_dir: Path, label: str) -> None:
             pass
         print(f"[DEBUG] Saved {label} HTML -> {html_path}")
         print(f"[DEBUG] Saved {label} PNG  -> {png_path}")
-    except Exception as e:
+        except Exception as e:
         print(f"[DEBUG] Failed saving debug artifacts ({label}): {e}")
 
 def try_click(driver, element) -> bool:
@@ -202,9 +296,9 @@ def try_click(driver, element) -> bool:
         pass
     try:
         driver.execute_script("arguments[0].click();", element)
-        return True
+                        return True
     except Exception:
-        return False
+            return False
 
 def handle_consent_and_popups(driver) -> None:
     """Try to accept cookie banners and close ad popups if any."""
@@ -236,30 +330,31 @@ def handle_consent_and_popups(driver) -> None:
 @app.route("/api/download-audio", methods=["POST"])
 def download_audio():
     """Download audio from YouTube via ezconv.com automation."""
-    data = request.get_json()
-    youtube_url = data.get("youtube_url", "")
+    with memory_efficient_context():
+        data = request.get_json()
+        youtube_url = data.get("youtube_url", "")
 
-    if not youtube_url:
-        return jsonify({"success": False, "message": "No YouTube URL provided"})
+        if not youtube_url:
+            return jsonify({"success": False, "message": "No YouTube URL provided"})
 
-    print(f"Starting audio download for: {youtube_url}")
-    debug_id = uuid.uuid4().hex[:8]
-    debug_dir = DEBUG_FOLDER / f"job_{debug_id}"
+        print(f"Starting audio download for: {youtube_url}")
+        debug_id = uuid.uuid4().hex[:8]
+        debug_dir = DEBUG_FOLDER / f"job_{debug_id}"
 
-    # Limit to one conversion at a time to avoid OOM
-    if not _download_lock.acquire(blocking=False):
-        return jsonify({"success": False, "message": "Server busy. Please try again in a moment."})
+        # Limit to one conversion at a time to avoid OOM
+        if not _download_lock.acquire(blocking=False):
+            return jsonify({"success": False, "message": "Server busy. Please try again in a moment."})
 
-    driver = None
-    try:
-        # Setup Selenium driver
-        driver = setup_selenium_driver()
-        if not driver:
-            return jsonify({"success": False, "message": "Failed to initialize browser"})
+            driver = None
+            try:
+                # Setup Selenium driver
+                driver = setup_selenium_driver()
+                if not driver:
+                    return jsonify({"success": False, "message": "Failed to initialize browser"})
 
         # Navigate to ezconv.com
         print("Navigating to ezconv.com...")
-        driver.get("https://ezconv.com/v820")
+                    driver.get("https://ezconv.com/v820")
         time.sleep(2)
         save_debug(driver, debug_dir, "01_loaded")
         handle_consent_and_popups(driver)
@@ -268,8 +363,8 @@ def download_audio():
         # Find and fill the URL input field
         print("Looking for URL input field...")
         url_input = WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, "input[type='text']"))
-        )
+                        EC.presence_of_element_located((By.CSS_SELECTOR, "input[type='text']"))
+                    )
         url_input.clear()
         url_input.send_keys(youtube_url)
         # Dispatch change/input events for React-like sites
@@ -367,7 +462,7 @@ def download_audio():
                 return jsonify({"success": False, "message": f"Conversion timeout after {max_wait_time} seconds", "debug_id": debug_id})
 
             # Wait a bit more to ensure it's clickable
-            time.sleep(1)
+                        time.sleep(1)
 
             # Try to make it clickable
             try:
@@ -407,7 +502,7 @@ def download_audio():
             time.sleep(2)
 
             # Try to get download URL from current page
-            current_url = driver.current_url
+                    current_url = driver.current_url
             print(f"Current URL after click: {current_url}")
 
             if "download" in current_url.lower() or ".mp3" in current_url.lower():
@@ -450,13 +545,13 @@ def download_audio():
                     pass
 
                 response = session.get(download_link, stream=True, timeout=60, allow_redirects=True)
-                response.raise_for_status()
+                    response.raise_for_status()
 
                 filename = f"audio_{uuid.uuid4().hex[:8]}.mp3"
                 filepath = DOWNLOADS_FOLDER / filename
                 print(f"Saving to: {filepath}")
                 with open(filepath, "wb") as f:
-                    for chunk in response.iter_content(chunk_size=8192):
+                        for chunk in response.iter_content(chunk_size=8192):
                         if chunk:
                             f.write(chunk)
 
@@ -467,24 +562,26 @@ def download_audio():
                     "filename": filename,
                     "debug_id": debug_id,
                 })
-            else:
+                    else:
                 print("ERROR: Could not find any download link")
                 save_debug(driver, debug_dir, "07_no_download_link")
                 return jsonify({"success": False, "message": "Could not find download link after conversion", "debug_id": debug_id})
+            except Exception as e:
+                print(f"Error finding download button: {str(e)}")
+                save_debug(driver, debug_dir, "08_exception")
+                return jsonify({"success": False, "message": f"Download button not found: {str(e)[:100]}", "debug_id": debug_id})
         except Exception as e:
-            print(f"Error finding download button: {str(e)}")
-            save_debug(driver, debug_dir, "08_exception")
-            return jsonify({"success": False, "message": f"Download button not found: {str(e)[:100]}", "debug_id": debug_id})
-    except Exception as e:
-        print(f"Error during automation: {str(e)}")
-        return jsonify({"success": False, "message": f"Automation error: {str(e)[:100]}", "debug_id": debug_id})
-    finally:
-        try:
-            if driver:
-                driver.quit()
-        except Exception:
-            pass
-        _download_lock.release()
+            print(f"Error during automation: {str(e)}")
+            return jsonify({"success": False, "message": f"Automation error: {str(e)[:100]}", "debug_id": debug_id})
+        finally:
+            try:
+                if driver:
+                    driver.quit()
+                    _active_drivers.discard(driver)  # Remove from tracking
+            except Exception:
+                pass
+            cleanup_memory()  # Aggressive cleanup
+            _download_lock.release()
 
 @app.route("/audio/<filename>")
 def serve_audio(filename):
@@ -499,41 +596,55 @@ def serve_audio(filename):
 
 @app.route("/api/search", methods=["POST"])
 def search_songs():
+    with memory_efficient_context():
     try:
         data = request.get_json()
-        song_input = data.get("songs", "")
+            song_input = data.get("songs", "")
 
-        songs = parse_song_list(song_input)
+            songs = parse_song_list(song_input)
         if not songs:
+                return jsonify({
+                    "success": False,
+                    "message": "No valid songs found! Please use format: 1. Song Name",
+                })
+
+            # Use generator for memory efficiency
+            results = []
+            for i, song in enumerate(songs, 1):
+                print(f"Searching {i}/{len(songs)}: {song}")
+                video_url = search_youtube_video(song)
+                results.append({
+                    "number": i,
+                    "song": song,
+                    "url": video_url,
+                    "status": "success" if video_url else "failed",
+                })
+                if i < len(songs):
+                    time.sleep(0.5)
+                    # Force garbage collection between searches
+                    if i % 3 == 0:
+                        gc.collect()
+
+            return jsonify({
+                "success": True,
+                "total": len(songs),
+                "results": results,
+            })
+        
+    except Exception as e:
             return jsonify({
                 "success": False,
-                "message": "No valid songs found! Please use format: 1. Song Name",
+                "message": f"Error: {str(e)}",
             })
 
-        results = []
-        for i, song in enumerate(songs, 1):
-            print(f"Searching {i}/{len(songs)}: {song}")
-            video_url = search_youtube_video(song)
-            results.append({
-                "number": i,
-                "song": song,
-                "url": video_url,
-                "status": "success" if video_url else "failed",
-            })
-            if i < len(songs):
-                time.sleep(0.5)
-
-        return jsonify({
-            "success": True,
-            "total": len(songs),
-            "results": results,
-        })
-
+@app.route("/api/cleanup", methods=["POST"])
+def cleanup_endpoint():
+    """Manual memory cleanup endpoint."""
+    try:
+        cleanup_memory()
+        return jsonify({"success": True, "message": "Memory cleanup completed"})
     except Exception as e:
-        return jsonify({
-            "success": False,
-            "message": f"Error: {str(e)}",
-        })
+        return jsonify({"success": False, "message": f"Cleanup error: {str(e)}"})
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
