@@ -361,7 +361,7 @@ def download_audio():
             print("Looking for Convert button...")
             convert_locators = [
                 (By.XPATH, "//button[@id=':R1ajalffata:']"),
-                (By.XPATH, "//button[contains(normalize-space(), 'Convert')"]),
+                (By.XPATH, "//button[contains(normalize-space(), 'Convert')]"),
                 (By.XPATH, "//*[self::button or self::a][contains(translate(normalize-space(.), 'abcdefghijklmnopqrstuvwxyz', 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'), 'CONVERT')]")
             ]
             convert_button = None
