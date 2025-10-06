@@ -426,7 +426,7 @@ def download_audio():
                 # Try to extract from page source as last resort
                 print("Trying to extract download URL from page source...")
                 page_source = driver.page_source
-                mp3_pattern = r"(https?://[^\s<>"]+\.mp3[^\s<>"]*)"
+                mp3_pattern = r'(https?://[^\s<>"]+\.mp3[^\s<>"]*)'
                 matches = re.findall(mp3_pattern, page_source)
                 if matches:
                     download_link = matches[0]
