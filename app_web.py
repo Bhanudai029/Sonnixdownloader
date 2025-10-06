@@ -198,51 +198,98 @@ def download_audio():
             convert_button.click()
             print("Convert button clicked")
             
-            # Wait 20 seconds for conversion
-            print("Waiting 20 seconds for conversion...")
-            time.sleep(20)
-            
-            # Look for Download MP3 button
-            print("Looking for Download MP3 button...")
+            # Wait for conversion to complete - look for Download MP3 button
+            print("Waiting for conversion to complete...")
             try:
-                download_button = WebDriverWait(driver, 15).until(
+                # Wait up to 60 seconds for the Download MP3 button to appear
+                download_button = WebDriverWait(driver, 60).until(
+                    EC.presence_of_element_located((By.XPATH, "//button[normalize-space()='Download MP3']"))
+                )
+                print(f"Download MP3 button appeared!")
+                
+                # Wait a bit more to ensure it's clickable
+                time.sleep(2)
+                
+                # Try to make it clickable
+                download_button = WebDriverWait(driver, 10).until(
                     EC.element_to_be_clickable((By.XPATH, "//button[normalize-space()='Download MP3']"))
                 )
                 
+                print(f"Download button is clickable, getting download link...")
+                
                 # Get download link before clicking
                 download_link = download_button.get_attribute("href")
+                if not download_link:
+                    # Try onclick attribute
+                    onclick = download_button.get_attribute("onclick")
+                    if onclick:
+                        print(f"Found onclick: {onclick}")
+                    
+                    # Try to find parent anchor tag
+                    try:
+                        parent = download_button.find_element(By.XPATH, "..")
+                        download_link = parent.get_attribute("href")
+                    except:
+                        pass
+                
                 if not download_link:
                     # Try to find download link in page
                     download_links = driver.find_elements(By.CSS_SELECTOR, "a[href*='download'], a[download]")
                     if download_links:
                         download_link = download_links[0].get_attribute("href")
+                        print(f"Found download link via CSS selector: {download_link}")
                 
-                print(f"Download button found, clicking...")
-                download_button.click()
+                print(f"Clicking Download MP3 button...")
+                driver.execute_script("arguments[0].click();", download_button)
+                time.sleep(3)
+                
+                # Wait for potential redirect or download to start
                 time.sleep(2)
                 
                 # Try to get download URL from current page
                 current_url = driver.current_url
+                print(f"Current URL after click: {current_url}")
+                
                 if 'download' in current_url.lower() or '.mp3' in current_url.lower():
                     download_link = current_url
+                    print(f"Download link from redirect: {download_link}")
                 
                 if not download_link:
                     # Look for download links on the page
-                    download_links = driver.find_elements(By.CSS_SELECTOR, "a[href*='download'], a[href*='.mp3']")
+                    print("Looking for download links on page...")
+                    download_links = driver.find_elements(By.CSS_SELECTOR, "a[href*='download'], a[href*='.mp3'], a[download]")
                     if download_links:
                         download_link = download_links[0].get_attribute("href")
+                        print(f"Found download link: {download_link}")
+                
+                # Try to extract from page source as last resort
+                if not download_link:
+                    print("Trying to extract download URL from page source...")
+                    page_source = driver.page_source
+                    import re
+                    # Look for download URLs in the page source
+                    mp3_pattern = r'(https?://[^\s<>"]+\.mp3[^\s<>"]*)'
+                    matches = re.findall(mp3_pattern, page_source)
+                    if matches:
+                        download_link = matches[0]
+                        print(f"Extracted download link from source: {download_link}")
                 
                 if download_link:
-                    print(f"Download link found: {download_link}")
+                    print(f"Final download link: {download_link}")
+                    
+                    # Clean up the URL (remove HTML entities)
+                    download_link = download_link.replace('&amp;', '&')
                     
                     # Download the file using requests
-                    response = requests.get(download_link, stream=True, timeout=60)
+                    print(f"Starting download via requests...")
+                    response = requests.get(download_link, stream=True, timeout=60, allow_redirects=True)
                     response.raise_for_status()
                     
                     # Generate unique filename
                     filename = f"audio_{uuid.uuid4().hex[:8]}.mp3"
                     filepath = DOWNLOADS_FOLDER / filename
                     
+                    print(f"Saving to: {filepath}")
                     with open(filepath, 'wb') as f:
                         for chunk in response.iter_content(chunk_size=8192):
                             f.write(chunk)
@@ -258,8 +305,9 @@ def download_audio():
                         'filename': filename
                     })
                 else:
+                    print("ERROR: Could not find any download link")
                     driver.quit()
-                    return jsonify({'success': False, 'message': 'Could not find download link'})
+                    return jsonify({'success': False, 'message': 'Could not find download link after conversion'})
                     
             except Exception as e:
                 print(f"Error finding download button: {str(e)}")
