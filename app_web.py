@@ -34,41 +34,40 @@ _download_lock = threading.Lock()
 def parse_song_list(song_input: str) -> list[str]:
     """Parse numbered song list from text input."""
     songs: list[str] = []
-        
-        if not song_input or not song_input.strip():
-            return songs
-        
-        buffer = song_input.strip()
-        
+
+    if not song_input or not song_input.strip():
+        return songs
+
+    buffer = song_input.strip()
+
     # Handle single line with all songs (e.g., "1. A2. B3. C")
     if "\n" not in buffer and re.search(r"\d+\.\s*\w", buffer):
         parts = re.findall(r"(\d+\.)\s*([^0-9]*?)(?=\d+\.|$)", buffer)
-            if parts:
-                for _, title in parts:
-                    song_name = re.sub(r"\s+", " ", title.strip())
-                    if song_name:
-                        songs.append(song_name)
-        else:
+        if parts:
+            for _, title in parts:
+                song_name = re.sub(r"\s+", " ", title.strip())
+                if song_name:
+                    songs.append(song_name)
+    else:
         # Handle multi-line input
-            numbered_item_regex = re.compile(r"\b(\d+)\.\s*([^\d].*?)(?=\s*\d+\.|$)", re.DOTALL)
-            matches = numbered_item_regex.findall(buffer)
-            
-            if matches:
-                for _, title in matches:
-                    song_name = re.sub(r"\s+", " ", title.strip())
+        numbered_item_regex = re.compile(r"\b(\d+)\.\s*([^\d].*?)(?=\s*\d+\.|$)", re.DOTALL)
+        matches = numbered_item_regex.findall(buffer)
+        if matches:
+            for _, title in matches:
+                song_name = re.sub(r"\s+", " ", title.strip())
+                if song_name:
+                    songs.append(song_name)
+        else:
+            # Fallback: parse per-line
+            line_regex = re.compile(r"^\s*\d+\.\s*(.+)$")
+            for raw in buffer.splitlines():
+                m = line_regex.match(raw.strip())
+                if m:
+                    song_name = re.sub(r"\s+", " ", m.group(1).strip())
                     if song_name:
                         songs.append(song_name)
-            else:
-                # Fallback: parse per-line
-                line_regex = re.compile(r"^\s*\d+\.\s*(.+)$")
-                for raw in buffer.splitlines():
-                    m = line_regex.match(raw.strip())
-                    if m:
-                        song_name = re.sub(r"\s+", " ", m.group(1).strip())
-                        if song_name:
-                            songs.append(song_name)
-        
-        return songs
+
+    return songs
 
 def is_shorts_url(video_id: str, html_content: str) -> bool:
     """Check if video ID belongs to a shorts video by looking for '/shorts/VIDEOID' in HTML."""
@@ -78,35 +77,35 @@ def search_youtube_video(song_name: str, max_retries: int = 2) -> str | None:
     """Search YouTube for a song and return long-form video URL."""
     try:
         search_query = song_name.replace(" ", "+")
-            search_url = f"https://www.youtube.com/results?search_query={search_query}"
-            
-                headers = {
+        search_url = f"https://www.youtube.com/results?search_query={search_query}"
+
+        headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
             "Accept-Language": "en-US,en;q=0.9",
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-                }
-                
-                response = requests.get(search_url, headers=headers, timeout=15)
-                if response.status_code != 200:
-                    return None
-                
-                video_id_pattern = r'"videoId":"([a-zA-Z0-9_-]{11})"'
-                matches = re.findall(video_id_pattern, response.text)
-                if not matches:
-                    return None
-                
+        }
+
+        response = requests.get(search_url, headers=headers, timeout=15)
+        if response.status_code != 200:
+            return None
+
+        video_id_pattern = r'"videoId":"([a-zA-Z0-9_-]{11})"'
+        matches = re.findall(video_id_pattern, response.text)
+        if not matches:
+            return None
+
         for video_id in matches[:15]:
             if f"/shorts/{video_id}" in response.text:
                 continue
             if len(video_id) == 11:
                 return f"https://www.youtube.com/watch?v={video_id}"
-                return None
-            except requests.Timeout:
-                return None
-            except Exception as e:
+        return None
+    except requests.Timeout:
+        return None
+    except Exception as e:
         print(f"Error searching for {song_name}: {str(e)[:100]}")
-                return None
-                
+        return None
+
 @app.route("/")
 def index():
     return render_template("index_web.html")
@@ -141,6 +140,7 @@ def setup_selenium_driver():
         "profile.default_content_setting_values.popups": 2,
     }
     chrome_options.add_experimental_option("prefs", prefs)
+
     # Extra memory/perf flags
     chrome_options.add_argument("--disable-extensions")
     chrome_options.add_argument("--disable-background-networking")
@@ -165,8 +165,8 @@ def setup_selenium_driver():
         return driver
     except Exception as e:
         print(f"Error setting up Selenium driver: {e}")
-            return None
-            
+        return None
+
 def save_debug(driver, debug_dir: Path, label: str) -> None:
     """Save page HTML and screenshot for debugging."""
     if not ENABLE_EZCONV_DEBUG:
@@ -183,7 +183,7 @@ def save_debug(driver, debug_dir: Path, label: str) -> None:
             pass
         print(f"[DEBUG] Saved {label} HTML -> {html_path}")
         print(f"[DEBUG] Saved {label} PNG  -> {png_path}")
-        except Exception as e:
+    except Exception as e:
         print(f"[DEBUG] Failed saving debug artifacts ({label}): {e}")
 
 def try_click(driver, element) -> bool:
@@ -204,8 +204,8 @@ def try_click(driver, element) -> bool:
         driver.execute_script("arguments[0].click();", element)
         return True
     except Exception:
-                return False
-            
+        return False
+
 def handle_consent_and_popups(driver) -> None:
     """Try to accept cookie banners and close ad popups if any."""
     selectors = [
@@ -236,270 +236,255 @@ def handle_consent_and_popups(driver) -> None:
 @app.route("/api/download-audio", methods=["POST"])
 def download_audio():
     """Download audio from YouTube via ezconv.com automation."""
+    data = request.get_json()
+    youtube_url = data.get("youtube_url", "")
+
+    if not youtube_url:
+        return jsonify({"success": False, "message": "No YouTube URL provided"})
+
+    print(f"Starting audio download for: {youtube_url}")
+    debug_id = uuid.uuid4().hex[:8]
+    debug_dir = DEBUG_FOLDER / f"job_{debug_id}"
+
+    # Limit to one conversion at a time to avoid OOM
+    if not _download_lock.acquire(blocking=False):
+        return jsonify({"success": False, "message": "Server busy. Please try again in a moment."})
+
+    driver = None
     try:
-        data = request.get_json()
-        youtube_url = data.get("youtube_url", "")
-
-        if not youtube_url:
-            return jsonify({"success": False, "message": "No YouTube URL provided"})
-
-        print(f"Starting audio download for: {youtube_url}")
-        debug_id = uuid.uuid4().hex[:8]
-        debug_dir = DEBUG_FOLDER / f"job_{debug_id}"
-
-        # Limit to one conversion at a time to avoid OOM
-        if not _download_lock.acquire(blocking=False):
-            return jsonify({"success": False, "message": "Server busy. Please try again in a moment."})
-
         # Setup Selenium driver
         driver = setup_selenium_driver()
         if not driver:
-            _download_lock.release()
             return jsonify({"success": False, "message": "Failed to initialize browser"})
 
+        # Navigate to ezconv.com
+        print("Navigating to ezconv.com...")
+        driver.get("https://ezconv.com/v820")
+        time.sleep(2)
+        save_debug(driver, debug_dir, "01_loaded")
+        handle_consent_and_popups(driver)
+        save_debug(driver, debug_dir, "02_after_consent")
+
+        # Find and fill the URL input field
+        print("Looking for URL input field...")
+        url_input = WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, "input[type='text']"))
+        )
+        url_input.clear()
+        url_input.send_keys(youtube_url)
+        # Dispatch change/input events for React-like sites
         try:
-            # Navigate to ezconv.com
-            print("Navigating to ezconv.com...")
-                    driver.get("https://ezconv.com/v820")
-            time.sleep(2)
-            save_debug(driver, debug_dir, "01_loaded")
-            handle_consent_and_popups(driver)
-            save_debug(driver, debug_dir, "02_after_consent")
+            driver.execute_script(
+                "arguments[0].dispatchEvent(new Event('input', {bubbles: true}));"
+                "arguments[0].dispatchEvent(new Event('change', {bubbles: true}));",
+                url_input,
+            )
+        except Exception:
+            pass
+        print("YouTube URL pasted")
+        save_debug(driver, debug_dir, "03_url_filled")
 
-            # Find and fill the URL input field
-            print("Looking for URL input field...")
-            url_input = WebDriverWait(driver, 10).until(
-                        EC.presence_of_element_located((By.CSS_SELECTOR, "input[type='text']"))
-                    )
-            url_input.clear()
-            url_input.send_keys(youtube_url)
-            # Dispatch change/input events for React-like sites
+        # Find and click the Convert button (robust fallbacks)
+        print("Looking for Convert button...")
+        convert_locators = [
+            (By.XPATH, "//button[@id=':R1ajalffata:']"),  # may be dynamic
+            (By.XPATH, "//button[contains(normalize-space(), 'Convert')]") ,
+            (By.XPATH, "//*[self::button or self::a][contains(translate(normalize-space(.), 'abcdefghijklmnopqrstuvwxyz', 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'), 'CONVERT')]")
+        ]
+        convert_button = None
+        for by, sel in convert_locators:
             try:
-                driver.execute_script(
-                    "arguments[0].dispatchEvent(new Event('input', {bubbles: true}));"
-                    "arguments[0].dispatchEvent(new Event('change', {bubbles: true}));",
-                    url_input,
+                convert_button = WebDriverWait(driver, 6).until(
+                    EC.element_to_be_clickable((by, sel))
                 )
+                break
             except Exception:
-                pass
-            print("YouTube URL pasted")
-            save_debug(driver, debug_dir, "03_url_filled")
+                continue
+        if not convert_button:
+            save_debug(driver, debug_dir, "04_convert_not_found")
+            return jsonify({"success": False, "message": "Could not find Convert button", "debug_id": debug_id})
+        if not try_click(driver, convert_button):
+            save_debug(driver, debug_dir, "04_convert_click_failed")
+            return jsonify({"success": False, "message": "Failed to click Convert button", "debug_id": debug_id})
+        print("Convert button clicked")
+        time.sleep(1)
 
-            # Find and click the Convert button (robust fallbacks)
-            print("Looking for Convert button...")
-            convert_locators = [
-                (By.XPATH, "//button[@id=':R1ajalffata:']"),  # may be dynamic
-                (By.XPATH, "//button[contains(normalize-space(), 'Convert')]") ,
-                (By.XPATH, "//*[self::button or self::a][contains(translate(normalize-space(.), 'abcdefghijklmnopqrstuvwxyz', 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'), 'CONVERT')]")
+        # Close any popups spawned by click and return to main window
+        handle_consent_and_popups(driver)
+        save_debug(driver, debug_dir, "05_after_convert_click")
+
+        # Wait for conversion to complete - check every second for Download MP3 button
+        print("Waiting for conversion to complete...")
+        download_button = None
+        max_wait_time = 90  # Allow up to 90 seconds
+
+        try:
+            dl_locators = [
+                (By.XPATH, "//button[normalize-space()='Download MP3']"),
+                (By.XPATH, "//a[normalize-space()='Download MP3']"),
+                (By.XPATH, "//*[self::a or self::button][contains(translate(normalize-space(.), 'abcdefghijklmnopqrstuvwxyz', 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'), 'DOWNLOAD MP3')]")
             ]
-            convert_button = None
-            for by, sel in convert_locators:
-                try:
-                    convert_button = WebDriverWait(driver, 6).until(
-                        EC.element_to_be_clickable((by, sel))
-                    )
+            for seconds_elapsed in range(max_wait_time):
+                found = False
+                # Search in main document
+                for by, sel in dl_locators:
+                    try:
+                        elem = driver.find_element(by, sel)
+                        download_button = elem
+                        found = True
+                        break
+                    except Exception:
+                        pass
+                # If not found, search inside iframes
+                if not found:
+                    try:
+                        frames = driver.find_elements(By.TAG_NAME, "iframe")
+                        for frame in frames:
+                            driver.switch_to.frame(frame)
+                            for by, sel in dl_locators:
+                                try:
+                                    elem = driver.find_element(by, sel)
+                                    download_button = elem
+                                    found = True
+                                    break
+                                except Exception:
+                                    pass
+                            driver.switch_to.default_content()
+                            if found:
+                                break
+                    except Exception:
+                        driver.switch_to.default_content()
+                if found:
+                    print(f"✅ Download MP3 control appeared after {seconds_elapsed + 1} seconds!")
                     break
-                except Exception:
-                    continue
-            if not convert_button:
-                save_debug(driver, debug_dir, "04_convert_not_found")
-                driver.quit()
-                _download_lock.release()
-                return jsonify({"success": False, "message": "Could not find Convert button", "debug_id": debug_id})
-            if not try_click(driver, convert_button):
-                save_debug(driver, debug_dir, "04_convert_click_failed")
-                driver.quit()
-                _download_lock.release()
-                return jsonify({"success": False, "message": "Failed to click Convert button", "debug_id": debug_id})
-            print("Convert button clicked")
+                time.sleep(1)
+                if (seconds_elapsed + 1) % 5 == 0:
+                    print(f"   ⏳ Still converting... ({seconds_elapsed + 1}s elapsed)")
+
+            if not download_button:
+                print(f"❌ Timeout: Download button did not appear after {max_wait_time} seconds")
+                save_debug(driver, debug_dir, "06_timeout_no_download")
+                return jsonify({"success": False, "message": f"Conversion timeout after {max_wait_time} seconds", "debug_id": debug_id})
+
+            # Wait a bit more to ensure it's clickable
             time.sleep(1)
 
-            # Close any popups spawned by click and return to main window
-            handle_consent_and_popups(driver)
-            save_debug(driver, debug_dir, "05_after_convert_click")
-
-            # Wait for conversion to complete - check every second for Download MP3 button
-            print("Waiting for conversion to complete...")
-            download_button = None
-            max_wait_time = 90  # Allow up to 90 seconds
-
+            # Try to make it clickable
             try:
-                dl_locators = [
-                    (By.XPATH, "//button[normalize-space()='Download MP3']"),
-                    (By.XPATH, "//a[normalize-space()='Download MP3']"),
-                    (By.XPATH, "//*[self::a or self::button][contains(translate(normalize-space(.), 'abcdefghijklmnopqrstuvwxyz', 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'), 'DOWNLOAD MP3')]")
-                ]
-                for seconds_elapsed in range(max_wait_time):
-                    found = False
-                    # Search in main document
-                    for by, sel in dl_locators:
-                        try:
-                            elem = driver.find_element(by, sel)
-                            download_button = elem
-                            found = True
-                            break
-                        except Exception:
-                            pass
-                    # If not found, search inside iframes
-                    if not found:
-                        try:
-                            frames = driver.find_elements(By.TAG_NAME, "iframe")
-                            for frame in frames:
-                                driver.switch_to.frame(frame)
-                                for by, sel in dl_locators:
-                                    try:
-                                        elem = driver.find_element(by, sel)
-                                        download_button = elem
-                                        found = True
-                                        break
-                                    except Exception:
-                                        pass
-                                driver.switch_to.default_content()
-                                if found:
-                                    break
-                        except Exception:
-                            driver.switch_to.default_content()
-                    if found:
-                        print(f"✅ Download MP3 control appeared after {seconds_elapsed + 1} seconds!")
-                        break
-                    time.sleep(1)
-                    if (seconds_elapsed + 1) % 5 == 0:
-                        print(f"   ⏳ Still converting... ({seconds_elapsed + 1}s elapsed)")
+                download_button = WebDriverWait(driver, 10).until(
+                    EC.element_to_be_clickable((By.XPATH, "//*[self::a or self::button][contains(translate(normalize-space(.), 'abcdefghijklmnopqrstuvwxyz', 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'), 'DOWNLOAD MP3')]")
+                ))
+            except Exception:
+                pass
 
-                if not download_button:
-                    print(f"❌ Timeout: Download button did not appear after {max_wait_time} seconds")
-                    save_debug(driver, debug_dir, "06_timeout_no_download")
-                    driver.quit()
-                    _download_lock.release()
-                    return jsonify({"success": False, "message": f"Conversion timeout after {max_wait_time} seconds", "debug_id": debug_id})
+            print("Download button is clickable, getting download link...")
 
-                # Wait a bit more to ensure it's clickable
-                        time.sleep(1)
-
-                # Try to make it clickable
+            # Get download link before clicking
+            download_link = download_button.get_attribute("href")
+            if not download_link:
+                onclick = download_button.get_attribute("onclick")
+                if onclick:
+                    print(f"Found onclick: {onclick}")
                 try:
-                    download_button = WebDriverWait(driver, 10).until(
-                        EC.element_to_be_clickable((By.XPATH, "//*[self::a or self::button][contains(translate(normalize-space(.), 'abcdefghijklmnopqrstuvwxyz', 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'), 'DOWNLOAD MP3')]")
-                    ))
+                    parent = download_button.find_element(By.XPATH, "..")
+                    download_link = parent.get_attribute("href")
                 except Exception:
                     pass
 
-                print("Download button is clickable, getting download link...")
+            if not download_link:
+                # Try to find download link in page
+                download_links = driver.find_elements(By.CSS_SELECTOR, "a[href*='download'], a[download]")
+                if download_links:
+                    download_link = download_links[0].get_attribute("href")
+                    print(f"Found download link via CSS selector: {download_link}")
 
-                # Get download link before clicking
-                download_link = download_button.get_attribute("href")
-                if not download_link:
-                    onclick = download_button.get_attribute("onclick")
-                    if onclick:
-                        print(f"Found onclick: {onclick}")
-                    try:
-                        parent = download_button.find_element(By.XPATH, "..")
-                        download_link = parent.get_attribute("href")
-                    except Exception:
-                        pass
+            print("Clicking Download MP3 button...")
+            if not try_click(driver, download_button):
+                driver.execute_script("arguments[0].click();", download_button)
+            time.sleep(3)
 
-                if not download_link:
-                    # Try to find download link in page
-                    download_links = driver.find_elements(By.CSS_SELECTOR, "a[href*='download'], a[download]")
-                    if download_links:
-                        download_link = download_links[0].get_attribute("href")
-                        print(f"Found download link via CSS selector: {download_link}")
+            # Wait for potential redirect or download to start
+            time.sleep(2)
 
-                print("Clicking Download MP3 button...")
-                if not try_click(driver, download_button):
-                    driver.execute_script("arguments[0].click();", download_button)
-                time.sleep(3)
+            # Try to get download URL from current page
+            current_url = driver.current_url
+            print(f"Current URL after click: {current_url}")
 
-                # Wait for potential redirect or download to start
-                time.sleep(2)
+            if "download" in current_url.lower() or ".mp3" in current_url.lower():
+                download_link = current_url
+                print(f"Download link from redirect: {download_link}")
 
-                # Try to get download URL from current page
-                    current_url = driver.current_url
-                print(f"Current URL after click: {current_url}")
+            if not download_link:
+                # Look for download links on the page
+                print("Looking for download links on page...")
+                download_links = driver.find_elements(By.CSS_SELECTOR, "a[href*='download'], a[href*='.mp3'], a[download]")
+                if download_links:
+                    download_link = download_links[0].get_attribute("href")
+                    print(f"Found download link: {download_link}")
 
-                if "download" in current_url.lower() or ".mp3" in current_url.lower():
-                    download_link = current_url
-                    print(f"Download link from redirect: {download_link}")
+            if not download_link:
+                # Try to extract from page source as last resort
+                print("Trying to extract download URL from page source...")
+                page_source = driver.page_source
+                mp3_pattern = r"(https?://[^\s<>"]+\.mp3[^\s<>"]*)"
+                matches = re.findall(mp3_pattern, page_source)
+                if matches:
+                    download_link = matches[0]
+                    print(f"Extracted download link from source: {download_link}")
 
-                if not download_link:
-                    # Look for download links on the page
-                    print("Looking for download links on page...")
-                    download_links = driver.find_elements(By.CSS_SELECTOR, "a[href*='download'], a[href*='.mp3'], a[download]")
-                    if download_links:
-                        download_link = download_links[0].get_attribute("href")
-                        print(f"Found download link: {download_link}")
+            if download_link:
+                print(f"Final download link: {download_link}")
+                download_link = download_link.replace("&amp;", "&")
 
-                if not download_link:
-                    # Try to extract from page source as last resort
-                    print("Trying to extract download URL from page source...")
-                    page_source = driver.page_source
-                    mp3_pattern = r"(https?://[^\s<>\"]+\.mp3[^\s<>\"]*)"
-                    matches = re.findall(mp3_pattern, page_source)
-                    if matches:
-                        download_link = matches[0]
-                        print(f"Extracted download link from source: {download_link}")
+                print("Starting download via requests...")
+                session = requests.Session()
+                session.headers.update({
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
+                    "Referer": current_url,
+                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+                })
+                try:
+                    for c in driver.get_cookies():
+                        session.cookies.set(c.get("name"), c.get("value"))
+                except Exception:
+                    pass
 
-                if download_link:
-                    print(f"Final download link: {download_link}")
-                    download_link = download_link.replace("&amp;", "&")
+                response = session.get(download_link, stream=True, timeout=60, allow_redirects=True)
+                response.raise_for_status()
 
-                    print("Starting download via requests...")
-                    session = requests.Session()
-                    session.headers.update({
-                        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
-                        "Referer": current_url,
-                        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-                    })
-                    try:
-                        for c in driver.get_cookies():
-                            session.cookies.set(c.get("name"), c.get("value"))
-                    except Exception:
-                        pass
-
-                    response = session.get(download_link, stream=True, timeout=60, allow_redirects=True)
-                    response.raise_for_status()
-
-                    filename = f"audio_{uuid.uuid4().hex[:8]}.mp3"
-                    filepath = DOWNLOADS_FOLDER / filename
-                    print(f"Saving to: {filepath}")
-                    with open(filepath, "wb") as f:
-                        for chunk in response.iter_content(chunk_size=8192):
-                            if chunk:
+                filename = f"audio_{uuid.uuid4().hex[:8]}.mp3"
+                filepath = DOWNLOADS_FOLDER / filename
+                print(f"Saving to: {filepath}")
+                with open(filepath, "wb") as f:
+                    for chunk in response.iter_content(chunk_size=8192):
+                        if chunk:
                             f.write(chunk)
 
-                    print(f"Audio downloaded successfully: {filename}")
-                    driver.quit()
-                    _download_lock.release()
-                    return jsonify({
-                        "success": True,
-                        "audio_url": f"/audio/{filename}",
-                        "filename": filename,
-                        "debug_id": debug_id,
-                    })
-                    else:
-                    print("ERROR: Could not find any download link")
-                    save_debug(driver, debug_dir, "07_no_download_link")
-                    driver.quit()
-                    _download_lock.release()
-                    return jsonify({"success": False, "message": "Could not find download link after conversion", "debug_id": debug_id})
-
-            except Exception as e:
-                print(f"Error finding download button: {str(e)}")
-                save_debug(driver, debug_dir, "08_exception")
-                driver.quit()
-                _download_lock.release()
-                return jsonify({"success": False, "message": f"Download button not found: {str(e)[:100]}", "debug_id": debug_id})
-
-            except Exception as e:
-            print(f"Error during automation: {str(e)}")
+                print(f"Audio downloaded successfully: {filename}")
+                return jsonify({
+                    "success": True,
+                    "audio_url": f"/audio/{filename}",
+                    "filename": filename,
+                    "debug_id": debug_id,
+                })
+            else:
+                print("ERROR: Could not find any download link")
+                save_debug(driver, debug_dir, "07_no_download_link")
+                return jsonify({"success": False, "message": "Could not find download link after conversion", "debug_id": debug_id})
+        except Exception as e:
+            print(f"Error finding download button: {str(e)}")
+            save_debug(driver, debug_dir, "08_exception")
+            return jsonify({"success": False, "message": f"Download button not found: {str(e)[:100]}", "debug_id": debug_id})
+    except Exception as e:
+        print(f"Error during automation: {str(e)}")
+        return jsonify({"success": False, "message": f"Automation error: {str(e)[:100]}", "debug_id": debug_id})
+    finally:
+        try:
             if driver:
                 driver.quit()
-            _download_lock.release()
-            return jsonify({"success": False, "message": f"Automation error: {str(e)[:100]}", "debug_id": debug_id})
-
-        except Exception as e:
-        print(f"Error in download_audio: {str(e)}")
-        return jsonify({"success": False, "message": f"Server error: {str(e)[:100]}"})
+        except Exception:
+            pass
+        _download_lock.release()
 
 @app.route("/audio/<filename>")
 def serve_audio(filename):
@@ -543,7 +528,7 @@ def search_songs():
             "total": len(songs),
             "results": results,
         })
-        
+
     except Exception as e:
         return jsonify({
             "success": False,
