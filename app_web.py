@@ -52,7 +52,7 @@ def cleanup_memory():
     for driver in list(_active_drivers):
         try:
             driver.quit()
-                    except Exception:
+        except Exception:
             pass
     _active_drivers.clear()
     
