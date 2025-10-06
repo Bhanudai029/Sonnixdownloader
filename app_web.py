@@ -17,6 +17,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 import uuid
+import threading
 
 app = Flask(__name__)
 
@@ -25,45 +26,49 @@ DOWNLOADS_FOLDER = Path("downloaded_audios")
 DOWNLOADS_FOLDER.mkdir(parents=True, exist_ok=True)
 DEBUG_FOLDER = Path("debug_artifacts")
 DEBUG_FOLDER.mkdir(parents=True, exist_ok=True)
+ENABLE_EZCONV_DEBUG = os.environ.get("ENABLE_EZCONV_DEBUG", "0") == "1"
+
+# Limit concurrency to reduce memory pressure
+_download_lock = threading.Lock()
 
 def parse_song_list(song_input: str) -> list[str]:
     """Parse numbered song list from text input."""
     songs: list[str] = []
-
-    if not song_input or not song_input.strip():
-        return songs
-
-    buffer = song_input.strip()
-
+        
+        if not song_input or not song_input.strip():
+            return songs
+        
+        buffer = song_input.strip()
+        
     # Handle single line with all songs (e.g., "1. A2. B3. C")
     if "\n" not in buffer and re.search(r"\d+\.\s*\w", buffer):
         parts = re.findall(r"(\d+\.)\s*([^0-9]*?)(?=\d+\.|$)", buffer)
-        if parts:
-            for _, title in parts:
-                song_name = re.sub(r"\s+", " ", title.strip())
-                if song_name:
-                    songs.append(song_name)
-    else:
-        # Handle multi-line input
-        numbered_item_regex = re.compile(r"\b(\d+)\.\s*([^\d].*?)(?=\s*\d+\.|$)", re.DOTALL)
-        matches = numbered_item_regex.findall(buffer)
-
-        if matches:
-            for _, title in matches:
-                song_name = re.sub(r"\s+", " ", title.strip())
-                if song_name:
-                    songs.append(song_name)
-        else:
-            # Fallback: parse per-line
-            line_regex = re.compile(r"^\s*\d+\.\s*(.+)$")
-            for raw in buffer.splitlines():
-                m = line_regex.match(raw.strip())
-                if m:
-                    song_name = re.sub(r"\s+", " ", m.group(1).strip())
+            if parts:
+                for _, title in parts:
+                    song_name = re.sub(r"\s+", " ", title.strip())
                     if song_name:
                         songs.append(song_name)
-
-    return songs
+        else:
+        # Handle multi-line input
+            numbered_item_regex = re.compile(r"\b(\d+)\.\s*([^\d].*?)(?=\s*\d+\.|$)", re.DOTALL)
+            matches = numbered_item_regex.findall(buffer)
+            
+            if matches:
+                for _, title in matches:
+                    song_name = re.sub(r"\s+", " ", title.strip())
+                    if song_name:
+                        songs.append(song_name)
+            else:
+                # Fallback: parse per-line
+                line_regex = re.compile(r"^\s*\d+\.\s*(.+)$")
+                for raw in buffer.splitlines():
+                    m = line_regex.match(raw.strip())
+                    if m:
+                        song_name = re.sub(r"\s+", " ", m.group(1).strip())
+                        if song_name:
+                            songs.append(song_name)
+        
+        return songs
 
 def is_shorts_url(video_id: str, html_content: str) -> bool:
     """Check if video ID belongs to a shorts video by looking for '/shorts/VIDEOID' in HTML."""
@@ -73,35 +78,35 @@ def search_youtube_video(song_name: str, max_retries: int = 2) -> str | None:
     """Search YouTube for a song and return long-form video URL."""
     try:
         search_query = song_name.replace(" ", "+")
-        search_url = f"https://www.youtube.com/results?search_query={search_query}"
-
-        headers = {
+            search_url = f"https://www.youtube.com/results?search_query={search_query}"
+            
+                headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36",
             "Accept-Language": "en-US,en;q=0.9",
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-        }
-
-        response = requests.get(search_url, headers=headers, timeout=15)
-        if response.status_code != 200:
-            return None
-
-        video_id_pattern = r'"videoId":"([a-zA-Z0-9_-]{11})"'
-        matches = re.findall(video_id_pattern, response.text)
-        if not matches:
-            return None
-
+                }
+                
+                response = requests.get(search_url, headers=headers, timeout=15)
+                if response.status_code != 200:
+                    return None
+                
+                video_id_pattern = r'"videoId":"([a-zA-Z0-9_-]{11})"'
+                matches = re.findall(video_id_pattern, response.text)
+                if not matches:
+                    return None
+                
         for video_id in matches[:15]:
             if f"/shorts/{video_id}" in response.text:
                 continue
             if len(video_id) == 11:
                 return f"https://www.youtube.com/watch?v={video_id}"
-        return None
-    except requests.Timeout:
-        return None
-    except Exception as e:
+                return None
+            except requests.Timeout:
+                return None
+            except Exception as e:
         print(f"Error searching for {song_name}: {str(e)[:100]}")
-        return None
-
+                return None
+                
 @app.route("/")
 def index():
     return render_template("index_web.html")
@@ -113,7 +118,7 @@ def setup_selenium_driver():
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--disable-gpu")
-    chrome_options.add_argument("--window-size=1920,1080")
+    chrome_options.add_argument("--window-size=1280,800")
     chrome_options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
 
     # Light anti-automation adjustments
@@ -129,8 +134,21 @@ def setup_selenium_driver():
         "download.prompt_for_download": False,
         "download.directory_upgrade": True,
         "safebrowsing.enabled": True,
+        # Block images to save memory/bandwidth
+        "profile.managed_default_content_settings.images": 2,
+        # Block notifications/popups where possible
+        "profile.default_content_setting_values.notifications": 2,
+        "profile.default_content_setting_values.popups": 2,
     }
     chrome_options.add_experimental_option("prefs", prefs)
+    # Extra memory/perf flags
+    chrome_options.add_argument("--disable-extensions")
+    chrome_options.add_argument("--disable-background-networking")
+    chrome_options.add_argument("--disable-sync")
+    chrome_options.add_argument("--mute-audio")
+    chrome_options.add_argument("--blink-settings=imagesEnabled=false")
+    chrome_options.add_argument("--media-cache-size=0")
+    chrome_options.add_argument("--disk-cache-size=0")
 
     try:
         chromedriver_path = os.environ.get("CHROMEDRIVER_PATH", "/usr/bin/chromedriver")
@@ -147,10 +165,12 @@ def setup_selenium_driver():
         return driver
     except Exception as e:
         print(f"Error setting up Selenium driver: {e}")
-        return None
-
+            return None
+            
 def save_debug(driver, debug_dir: Path, label: str) -> None:
     """Save page HTML and screenshot for debugging."""
+    if not ENABLE_EZCONV_DEBUG:
+        return
     try:
         debug_dir.mkdir(parents=True, exist_ok=True)
         html_path = debug_dir / f"{label}.html"
@@ -163,7 +183,7 @@ def save_debug(driver, debug_dir: Path, label: str) -> None:
             pass
         print(f"[DEBUG] Saved {label} HTML -> {html_path}")
         print(f"[DEBUG] Saved {label} PNG  -> {png_path}")
-    except Exception as e:
+        except Exception as e:
         print(f"[DEBUG] Failed saving debug artifacts ({label}): {e}")
 
 def try_click(driver, element) -> bool:
@@ -184,8 +204,8 @@ def try_click(driver, element) -> bool:
         driver.execute_script("arguments[0].click();", element)
         return True
     except Exception:
-        return False
-
+                return False
+            
 def handle_consent_and_popups(driver) -> None:
     """Try to accept cookie banners and close ad popups if any."""
     selectors = [
@@ -227,15 +247,20 @@ def download_audio():
         debug_id = uuid.uuid4().hex[:8]
         debug_dir = DEBUG_FOLDER / f"job_{debug_id}"
 
+        # Limit to one conversion at a time to avoid OOM
+        if not _download_lock.acquire(blocking=False):
+            return jsonify({"success": False, "message": "Server busy. Please try again in a moment."})
+
         # Setup Selenium driver
         driver = setup_selenium_driver()
         if not driver:
+            _download_lock.release()
             return jsonify({"success": False, "message": "Failed to initialize browser"})
 
         try:
             # Navigate to ezconv.com
             print("Navigating to ezconv.com...")
-            driver.get("https://ezconv.com/v820")
+                    driver.get("https://ezconv.com/v820")
             time.sleep(2)
             save_debug(driver, debug_dir, "01_loaded")
             handle_consent_and_popups(driver)
@@ -244,8 +269,8 @@ def download_audio():
             # Find and fill the URL input field
             print("Looking for URL input field...")
             url_input = WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, "input[type='text']"))
-            )
+                        EC.presence_of_element_located((By.CSS_SELECTOR, "input[type='text']"))
+                    )
             url_input.clear()
             url_input.send_keys(youtube_url)
             # Dispatch change/input events for React-like sites
@@ -279,10 +304,12 @@ def download_audio():
             if not convert_button:
                 save_debug(driver, debug_dir, "04_convert_not_found")
                 driver.quit()
+                _download_lock.release()
                 return jsonify({"success": False, "message": "Could not find Convert button", "debug_id": debug_id})
             if not try_click(driver, convert_button):
                 save_debug(driver, debug_dir, "04_convert_click_failed")
                 driver.quit()
+                _download_lock.release()
                 return jsonify({"success": False, "message": "Failed to click Convert button", "debug_id": debug_id})
             print("Convert button clicked")
             time.sleep(1)
@@ -343,10 +370,11 @@ def download_audio():
                     print(f"❌ Timeout: Download button did not appear after {max_wait_time} seconds")
                     save_debug(driver, debug_dir, "06_timeout_no_download")
                     driver.quit()
+                    _download_lock.release()
                     return jsonify({"success": False, "message": f"Conversion timeout after {max_wait_time} seconds", "debug_id": debug_id})
 
                 # Wait a bit more to ensure it's clickable
-                time.sleep(1)
+                        time.sleep(1)
 
                 # Try to make it clickable
                 try:
@@ -386,7 +414,7 @@ def download_audio():
                 time.sleep(2)
 
                 # Try to get download URL from current page
-                current_url = driver.current_url
+                    current_url = driver.current_url
                 print(f"Current URL after click: {current_url}")
 
                 if "download" in current_url.lower() or ".mp3" in current_url.lower():
@@ -437,35 +465,39 @@ def download_audio():
                     with open(filepath, "wb") as f:
                         for chunk in response.iter_content(chunk_size=8192):
                             if chunk:
-                                f.write(chunk)
+                            f.write(chunk)
 
                     print(f"Audio downloaded successfully: {filename}")
                     driver.quit()
+                    _download_lock.release()
                     return jsonify({
                         "success": True,
                         "audio_url": f"/audio/{filename}",
                         "filename": filename,
                         "debug_id": debug_id,
                     })
-                else:
+                    else:
                     print("ERROR: Could not find any download link")
                     save_debug(driver, debug_dir, "07_no_download_link")
                     driver.quit()
+                    _download_lock.release()
                     return jsonify({"success": False, "message": "Could not find download link after conversion", "debug_id": debug_id})
 
             except Exception as e:
                 print(f"Error finding download button: {str(e)}")
                 save_debug(driver, debug_dir, "08_exception")
                 driver.quit()
+                _download_lock.release()
                 return jsonify({"success": False, "message": f"Download button not found: {str(e)[:100]}", "debug_id": debug_id})
 
-        except Exception as e:
+            except Exception as e:
             print(f"Error during automation: {str(e)}")
             if driver:
                 driver.quit()
+            _download_lock.release()
             return jsonify({"success": False, "message": f"Automation error: {str(e)[:100]}", "debug_id": debug_id})
 
-    except Exception as e:
+        except Exception as e:
         print(f"Error in download_audio: {str(e)}")
         return jsonify({"success": False, "message": f"Server error: {str(e)[:100]}"})
 
@@ -511,7 +543,7 @@ def search_songs():
             "total": len(songs),
             "results": results,
         })
-
+        
     except Exception as e:
         return jsonify({
             "success": False,
