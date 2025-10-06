@@ -3,313 +3,331 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>YouTube Auto Downloader</title>
+    <title>YouTube Song Search</title>
     <style>
         * {
             margin: 0;
             padding: 0;
             box-sizing: border-box;
         }
-        
+
         body {
-            font-family: 'Segoe UI', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-            background: linear-gradient(135deg, #0a0e17 0%, #1a1f2e 50%, #0f1419 100%);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            /* 2025 Trend: Mocha Mousse gradient with Soft Peach */
+            background: linear-gradient(135deg, #A6877D 0%, #D4A59A 50%, #F5E6D3 100%);
             min-height: 100vh;
             padding: 20px;
-            background-attachment: fixed;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            overflow-x: hidden;
         }
-        
+
+        /* Animated background accent */
+        body::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -10%;
+            width: 600px;
+            height: 600px;
+            background: radial-gradient(circle, rgba(184, 161, 216, 0.15) 0%, transparent 70%);
+            border-radius: 50%;
+            animation: float 20s ease-in-out infinite;
+        }
+
+        body::after {
+            content: '';
+            position: absolute;
+            bottom: -30%;
+            left: -10%;
+            width: 500px;
+            height: 500px;
+            background: radial-gradient(circle, rgba(244, 194, 194, 0.15) 0%, transparent 70%);
+            border-radius: 50%;
+            animation: float 25s ease-in-out infinite reverse;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translate(0, 0) scale(1); }
+            25% { transform: translate(30px, -30px) scale(1.05); }
+            50% { transform: translate(-20px, 20px) scale(0.95); }
+            75% { transform: translate(40px, 10px) scale(1.02); }
+        }
+
         .container {
-            max-width: 900px;
-            margin: 0 auto;
-            background: rgba(15, 20, 31, 0.85);
+            background: rgba(255, 255, 255, 0.95);
             backdrop-filter: blur(20px);
-            border: 1px solid rgba(0, 212, 255, 0.15);
             border-radius: 24px;
-            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 
-                        0 0 100px rgba(0, 212, 255, 0.1),
-                        inset 0 1px 0 rgba(255, 255, 255, 0.05);
-            overflow: hidden;
+            box-shadow: 0 25px 70px rgba(166, 135, 125, 0.25),
+                        0 10px 30px rgba(0, 0, 0, 0.1);
+            max-width: 850px;
+            width: 100%;
+            padding: 50px;
+            position: relative;
+            z-index: 1;
+            border: 1px solid rgba(255, 255, 255, 0.8);
         }
-        
-        .header {
-            background: linear-gradient(135deg, rgba(0, 212, 255, 0.15) 0%, rgba(139, 92, 246, 0.15) 100%);
-            border-bottom: 1px solid rgba(0, 212, 255, 0.2);
-            color: #fff;
-            padding: 30px;
+
+        h1 {
+            /* 2025 Trend: Digital Lavender accent */
+            background: linear-gradient(135deg, #B8A1D8 0%, #A6877D 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            font-size: 2.8rem;
+            margin-bottom: 12px;
             text-align: center;
+            font-weight: 700;
+            letter-spacing: -1px;
         }
-        
-        .header h1 {
-            font-size: 2.5em;
-            margin-bottom: 10px;
+
+        .subtitle {
+            color: #6B5B52;
+            text-align: center;
+            margin-bottom: 35px;
+            font-size: 1.15rem;
+            font-weight: 500;
         }
-        
-        .header p {
-            opacity: 0.9;
-            font-size: 1.1em;
-        }
-        
-        .content {
-            padding: 30px;
-        }
-        
+
         .input-section {
             margin-bottom: 30px;
         }
-        
-        .input-section label {
+
+        label {
             display: block;
+            color: #4A3F37;
             font-weight: 600;
-            margin-bottom: 10px;
-            color: #e0e6ed;
-            font-size: 1.1em;
-            text-shadow: 0 0 20px rgba(0, 212, 255, 0.3);
+            margin-bottom: 12px;
+            font-size: 1.1rem;
         }
-        
-        .input-section textarea {
-            width: 100%;
-            min-height: 200px;
-            padding: 15px;
-            background: rgba(10, 14, 23, 0.6);
-            border: 1px solid rgba(0, 212, 255, 0.2);
-            border-radius: 12px;
-            font-family: 'Consolas', 'Monaco', monospace;
-            font-size: 14px;
-            color: #e0e6ed;
-            resize: vertical;
-            transition: all 0.3s;
-        }
-        
-        .input-section textarea:focus {
-            outline: none;
-            border-color: #00d4ff;
-            background: rgba(10, 14, 23, 0.8);
-            box-shadow: 0 0 20px rgba(0, 212, 255, 0.2);
-        }
-        
+
         .example {
-            background: rgba(0, 212, 255, 0.05);
-            padding: 15px;
+            background: linear-gradient(135deg, rgba(184, 161, 216, 0.1) 0%, rgba(245, 230, 211, 0.2) 100%);
+            border-left: 4px solid #B8A1D8;
+            padding: 18px;
+            margin-bottom: 18px;
             border-radius: 12px;
-            margin-bottom: 15px;
-            border-left: 3px solid #00d4ff;
-            border: 1px solid rgba(0, 212, 255, 0.15);
+            font-family: 'Courier New', monospace;
+            font-size: 0.95rem;
+            color: #4A3F37;
+            box-shadow: 0 4px 15px rgba(184, 161, 216, 0.1);
         }
-        
-        .example h4 {
-            color: #00d4ff;
-            margin-bottom: 10px;
-            font-weight: 600;
+
+        textarea {
+            width: 100%;
+            min-height: 220px;
+            padding: 18px;
+            border: 2px solid rgba(166, 135, 125, 0.2);
+            border-radius: 16px;
+            font-size: 1rem;
+            font-family: inherit;
+            resize: vertical;
+            transition: all 0.3s ease;
+            background: rgba(255, 255, 255, 0.8);
+            color: #4A3F37;
         }
-        
-        .example code {
-            display: block;
-            font-family: 'Consolas', 'Monaco', monospace;
-            font-size: 13px;
-            line-height: 1.6;
-            color: #b4c0cc;
+
+        textarea:focus {
+            outline: none;
+            border-color: #B8A1D8;
+            box-shadow: 0 0 0 4px rgba(184, 161, 216, 0.1);
+            background: rgba(255, 255, 255, 1);
         }
-        
-        .button-group {
+
+        .button-container {
             display: flex;
-            gap: 15px;
-            margin-top: 20px;
+            gap: 12px;
+            margin-bottom: 30px;
         }
-        
+
         button {
             flex: 1;
-            padding: 15px 30px;
-            font-size: 1.1em;
-            font-weight: 600;
+            padding: 16px 32px;
             border: none;
-            border-radius: 10px;
+            border-radius: 14px;
+            font-size: 1.1rem;
+            font-weight: 600;
             cursor: pointer;
-            transition: all 0.3s;
-        }
-        
-        .btn-primary {
-            background: linear-gradient(135deg, #00d4ff 0%, #8b5cf6 100%);
-            color: white;
+            transition: all 0.3s ease;
             position: relative;
             overflow: hidden;
-            box-shadow: 0 4px 20px rgba(0, 212, 255, 0.3);
         }
-        
-        .btn-primary::before {
+
+        .search-btn {
+            /* 2025 Trend: Digital Lavender to Mocha gradient */
+            background: linear-gradient(135deg, #B8A1D8 0%, #A6877D 100%);
+            color: white;
+            box-shadow: 0 6px 20px rgba(184, 161, 216, 0.3);
+        }
+
+        .search-btn::before {
             content: '';
             position: absolute;
             top: 0;
             left: -100%;
             width: 100%;
             height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
-            transition: left 0.5s;
+            background: linear-gradient(135deg, #C9B3E8 0%, #B89987 100%);
+            transition: left 0.3s ease;
         }
-        
-        .btn-primary:hover:not(:disabled)::before {
-            left: 100%;
+
+        .search-btn:hover:not(:disabled)::before {
+            left: 0;
         }
-        
-        .btn-primary:hover:not(:disabled) {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 40px rgba(0, 212, 255, 0.5), 0 0 30px rgba(139, 92, 246, 0.3);
+
+        .search-btn:hover:not(:disabled) {
+            transform: translateY(-3px);
+            box-shadow: 0 12px 30px rgba(184, 161, 216, 0.4);
         }
-        
-        .btn-secondary {
-            background: rgba(10, 14, 23, 0.6);
-            color: #e0e6ed;
-            border: 1px solid rgba(0, 212, 255, 0.2);
+
+        .search-btn span {
+            position: relative;
+            z-index: 1;
         }
-        
-        .btn-secondary:hover:not(:disabled) {
-            background: rgba(10, 14, 23, 0.8);
-            border-color: #00d4ff;
-        }
-        
-        button:disabled {
+
+        .search-btn:disabled {
             opacity: 0.6;
             cursor: not-allowed;
         }
-        
-        .progress-section {
-            display: none;
-            margin-top: 30px;
-            padding: 20px;
-            background: rgba(10, 14, 23, 0.6);
-            border: 1px solid rgba(0, 212, 255, 0.15);
-            border-radius: 16px;
+
+        .clear-btn {
+            background: rgba(166, 135, 125, 0.1);
+            color: #6B5B52;
+            border: 2px solid rgba(166, 135, 125, 0.2);
         }
-        
-        .progress-section.active {
-            display: block;
+
+        .clear-btn:hover {
+            background: rgba(166, 135, 125, 0.15);
+            border-color: rgba(166, 135, 125, 0.3);
+            transform: translateY(-2px);
         }
-        
-        .progress-bar-container {
-            width: 100%;
-            height: 30px;
-            background: rgba(0, 0, 0, 0.4);
-            border: 1px solid rgba(0, 212, 255, 0.2);
-            border-radius: 15px;
-            overflow: hidden;
-            margin: 15px 0;
-        }
-        
-        .progress-bar {
-            height: 100%;
-            background: linear-gradient(90deg, #00d4ff 0%, #8b5cf6 100%);
-            transition: width 0.3s;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-weight: 600;
-            box-shadow: 0 0 20px rgba(0, 212, 255, 0.5);
-        }
-        
+
         .status {
             text-align: center;
-            font-size: 1.2em;
-            margin-bottom: 10px;
+            padding: 16px;
+            border-radius: 12px;
+            margin-bottom: 20px;
             font-weight: 600;
-            color: #00d4ff;
-            text-shadow: 0 0 20px rgba(0, 212, 255, 0.5);
+            display: none;
+            backdrop-filter: blur(10px);
         }
-        
-        .logs {
-            max-height: 400px;
-            overflow-y: auto;
-            background: rgba(0, 0, 0, 0.5);
-            color: #00ff88;
-            padding: 15px;
-            border-radius: 12px;
-            border: 1px solid rgba(0, 212, 255, 0.15);
-            font-family: 'Consolas', 'Monaco', monospace;
-            font-size: 13px;
-            line-height: 1.6;
-            margin-top: 15px;
-            box-shadow: inset 0 0 30px rgba(0, 255, 136, 0.05);
+
+        .status.success {
+            background: linear-gradient(135deg, rgba(76, 175, 80, 0.15) 0%, rgba(184, 161, 216, 0.1) 100%);
+            color: #2D5F2E;
+            border: 2px solid rgba(76, 175, 80, 0.3);
+            display: block;
         }
-        
-        .logs::-webkit-scrollbar {
-            width: 10px;
+
+        .status.error {
+            background: linear-gradient(135deg, rgba(244, 67, 54, 0.15) 0%, rgba(166, 135, 125, 0.1) 100%);
+            color: #8B3A3A;
+            border: 2px solid rgba(244, 67, 54, 0.3);
+            display: block;
         }
-        
-        .logs::-webkit-scrollbar-track {
-            background: rgba(0, 0, 0, 0.3);
-            border-radius: 5px;
+
+        .status.loading {
+            background: linear-gradient(135deg, rgba(255, 193, 7, 0.15) 0%, rgba(245, 230, 211, 0.2) 100%);
+            color: #8B6B00;
+            border: 2px solid rgba(255, 193, 7, 0.3);
+            display: block;
         }
-        
-        .logs::-webkit-scrollbar-thumb {
-            background: linear-gradient(180deg, #00d4ff, #8b5cf6);
-            border-radius: 5px;
-        }
-        
-        .logs::-webkit-scrollbar-thumb:hover {
-            background: linear-gradient(180deg, #8b5cf6, #00d4ff);
-        }
-        
+
         .results {
-            margin-top: 20px;
+            display: none;
         }
-        
+
+        .results.show {
+            display: block;
+            animation: fadeIn 0.5s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .results-header {
+            background: linear-gradient(135deg, #B8A1D8 0%, #A6877D 100%);
+            color: white;
+            padding: 24px;
+            border-radius: 16px;
+            margin-bottom: 24px;
+            text-align: center;
+            box-shadow: 0 8px 25px rgba(184, 161, 216, 0.3);
+        }
+
         .result-item {
-            padding: 10px;
-            margin: 5px 0;
-            border-radius: 5px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(245, 230, 211, 0.3) 100%);
+            border-left: 4px solid #B8A1D8;
+            padding: 22px;
+            margin-bottom: 16px;
+            border-radius: 14px;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(166, 135, 125, 0.1);
         }
-        
-        .result-item.success {
-            background: rgba(0, 255, 136, 0.1);
-            border-left: 4px solid #00ff88;
-            border: 1px solid rgba(0, 255, 136, 0.2);
-            color: #e0e6ed;
+
+        .result-item:hover {
+            transform: translateX(8px);
+            box-shadow: 0 8px 25px rgba(184, 161, 216, 0.2);
+            border-left-color: #C9B3E8;
         }
-        
+
         .result-item.failed {
-            background: rgba(255, 68, 68, 0.1);
-            border-left: 4px solid #ff4444;
-            border: 1px solid rgba(255, 68, 68, 0.2);
-            color: #e0e6ed;
+            border-left-color: #E89999;
+            opacity: 0.75;
         }
-        
-        .emoji {
-            font-size: 1.5em;
+
+        .result-number {
+            display: inline-block;
+            background: linear-gradient(135deg, #B8A1D8 0%, #A6877D 100%);
+            color: white;
+            width: 35px;
+            height: 35px;
+            border-radius: 50%;
+            text-align: center;
+            line-height: 35px;
+            font-weight: bold;
+            margin-right: 12px;
+            box-shadow: 0 4px 10px rgba(184, 161, 216, 0.3);
         }
-        
-        .screenshots {
-            margin-top: 20px;
+
+        .result-song {
+            font-size: 1.15rem;
+            font-weight: 600;
+            color: #4A3F37;
+            margin-bottom: 12px;
         }
-        
-        .screenshot-item {
-            margin: 10px 0;
-            padding: 15px;
-            background: rgba(255, 193, 7, 0.1);
-            border-left: 4px solid #ffc107;
-            border: 1px solid rgba(255, 193, 7, 0.2);
-            border-radius: 12px;
+
+        .result-url {
+            background: rgba(255, 255, 255, 0.9);
+            padding: 12px;
+            border-radius: 10px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+            word-break: break-all;
+            color: #B8A1D8;
+            border: 1px solid rgba(184, 161, 216, 0.2);
         }
-        
-        .screenshot-item h4 {
-            margin: 0 0 10px 0;
-            color: #ffc107;
+
+        .result-url a {
+            color: #B8A1D8;
+            text-decoration: none;
+            transition: color 0.2s ease;
         }
-        
-        .screenshot-item img {
-            max-width: 100%;
-            border: 2px solid rgba(0, 212, 255, 0.3);
-            border-radius: 8px;
-            cursor: pointer;
-            transition: transform 0.2s;
+
+        .result-url a:hover {
+            color: #9580B8;
+            text-decoration: underline;
         }
-        
-        .screenshot-item img:hover {
-            transform: scale(1.02);
+
+        .result-failed {
+            color: #C86666;
+            font-weight: 600;
         }
-        
+
         .spinner {
             display: inline-block;
             width: 20px;
@@ -319,537 +337,181 @@
             border-top-color: white;
             animation: spin 1s ease-in-out infinite;
         }
-        
+
         @keyframes spin {
             to { transform: rotate(360deg); }
         }
-        
-        .footer {
-            padding: 20px;
-            text-align: center;
-            color: #b4c0cc;
-            font-size: 0.9em;
-            border-top: 1px solid rgba(0, 212, 255, 0.15);
-            background: linear-gradient(135deg, rgba(0, 212, 255, 0.05) 0%, rgba(139, 92, 246, 0.05) 100%);
-        }
-        
-        /* Cookie Alert Banner */
-        .cookie-alert {
-            display: none;
-            background: linear-gradient(135deg, rgba(255, 59, 48, 0.15) 0%, rgba(255, 149, 0, 0.15) 100%);
-            border: 2px solid rgba(255, 59, 48, 0.5);
-            border-radius: 16px;
-            padding: 20px;
-            margin-bottom: 25px;
-            animation: pulse-glow 2s ease-in-out infinite;
-        }
-        
-        .cookie-alert.show {
-            display: block;
-        }
-        
-        .cookie-alert h3 {
-            color: #ff9500;
-            font-size: 1.3em;
-            margin-bottom: 12px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-        
-        .cookie-alert p {
-            color: #fff;
-            line-height: 1.6;
-            margin-bottom: 15px;
-        }
-        
-        .cookie-alert .alert-actions {
-            display: flex;
-            gap: 15px;
-            flex-wrap: wrap;
-        }
-        
-        .cookie-alert .btn-alert {
-            padding: 10px 20px;
-            background: linear-gradient(135deg, #ff3b30 0%, #ff9500 100%);
-            color: white;
-            border: none;
-            border-radius: 10px;
-            cursor: pointer;
-            font-weight: 600;
-            transition: all 0.3s ease;
-            text-decoration: none;
-        }
-        
-        .cookie-alert .btn-alert:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 20px rgba(255, 59, 48, 0.4);
-        }
 
-        /* Download Timer */
-        .timer-container {
-            position: fixed;
-            top: 50%;
-            right: 20px;
-            transform: translateY(-50%);
-            background: rgba(15, 20, 31, 0.95);
-            backdrop-filter: blur(20px);
-            border: 2px solid rgba(0, 212, 255, 0.3);
-            border-radius: 20px;
-            padding: 20px;
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5),
-                        0 0 50px rgba(0, 212, 255, 0.1);
-            z-index: 1000;
-            display: none;
-            animation: slideInRight 0.3s ease-out;
-        }
-
-        .timer-container.show {
-            display: block;
-        }
-
-        .timer-display {
-            font-family: 'Courier New', monospace;
-            font-size: 2.5em;
-            font-weight: bold;
-            color: #00d4ff;
-            text-align: center;
-            text-shadow: 0 0 20px rgba(0, 212, 255, 0.5);
-            margin-bottom: 10px;
-        }
-
-        .timer-label {
-            color: #b4c0cc;
-            font-size: 0.9em;
-            text-align: center;
-            opacity: 0.8;
-        }
-
-        @keyframes slideInRight {
-            from {
-                opacity: 0;
-                transform: translate(100%, -50%);
-            }
-            to {
-                opacity: 1;
-                transform: translate(0, -50%);
-            }
-        }
-
-        @keyframes pulse-glow {
-            0%, 100% {
-                box-shadow: 0 0 20px rgba(255, 59, 48, 0.3);
-            }
-            50% {
-                box-shadow: 0 0 40px rgba(255, 59, 48, 0.5);
-            }
-        }
-        
-        @media (max-width: 768px) {
-            .header h1 {
-                font-size: 1.8em;
+        @media (max-width: 600px) {
+            .container {
+                padding: 25px;
+                border-radius: 20px;
             }
 
-            .button-group {
-                flex-direction: column;
+            h1 {
+                font-size: 2rem;
             }
 
-            .timer-container {
-                right: 10px;
-                padding: 15px;
-                font-size: 0.9em;
+            .subtitle {
+                font-size: 1rem;
             }
 
-            .timer-display {
-                font-size: 2em;
+            button {
+                padding: 14px 24px;
+                font-size: 1rem;
+            }
+
+            .result-number {
+                width: 30px;
+                height: 30px;
+                line-height: 30px;
             }
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <div class="header">
-            <h1>🎵 YouTube Auto Downloader</h1>
-            <p>Convert YouTube videos to MP3 using ezconv.com</p>
-        </div>
-        
-        <div class="content">
-            <!-- Cookie Refresh Alert (shown dynamically when auth fails) -->
-            <div id="cookieAlert" class="cookie-alert">
-                <h3>🔑 Cookie Refresh Required!</h3>
-                <p><strong>YouTube is requesting authentication.</strong> Your download failed because cookies are missing, expired, or YouTube detected automated access.</p>
-                <p>📌 <strong>Action:</strong> Please update your cookies using one of the methods below to continue downloading.</p>
-                <div class="alert-actions">
-                    <button class="btn-alert" onclick="scrollToCookies()">📤 Upload Cookies File</button>
-                    <button class="btn-alert" onclick="scrollToPasteCookies()">📋 Paste Cookies</button>
-                </div>
-            </div>
-            
-            <div class="input-section">
-                <label for="songs">📝 Enter Your Song List:</label>
-                
-                <div class="example">
-                    <h4>📋 Example Format:</h4>
-                    <code>1. Shape of You<br>2. Blinding Lights<br>3. Levitating<br>4. Stay<br>5. Heat Waves</code>
-                </div>
-                
-                <textarea 
-                    id="songs" 
-                    placeholder="Paste your numbered song list here...&#10;&#10;1. First Song Name&#10;2. Second Song Name&#10;3. Third Song Name&#10;...and so on"
-                ></textarea>
-                
-                <div class="button-group">
-                    <button class="btn-primary" id="startBtn" onclick="startProcessing()">
-                        🚀 Start Download
-                    </button>
-                    <button class="btn-secondary" id="resetBtn" onclick="resetForm()" disabled>
-                        🔄 Reset
-                    </button>
-                </div>
-            </div>
-            
-            <div class="input-section" style="margin-top: -10px;">
-                <label>🍪 Optional: Upload cookies.txt (to bypass YouTube bot checks)</label>
-                <input type="file" id="cookiesFile" accept=".txt" />
-                <button class="btn-secondary" style="margin-top:10px;" onclick="uploadCookies()">Upload Cookies</button>
-                <span id="cookiesStatus" style="margin-left:10px;color:#28a745;font-weight:600"></span>
-            </div>
+        <h1>🎵 YouTube Song Search</h1>
+        <p class="subtitle">Find long-form video URLs for your favorite songs</p>
 
-            <div class="input-section" style="margin-top: 10px;">
-                <label>📋 Or paste Netscape cookies here:</label>
-                <textarea id="cookiesText" placeholder="# Netscape HTTP Cookie File...\n.example.com\tTRUE\t/\tFALSE\t0\tVISITOR_INFO1_LIVE\t..." style="min-height:120px"></textarea>
-                <div class="button-group" style="margin-top:10px; gap:10px;">
-                    <button class="btn-secondary" style="flex:0 0 auto" onclick="savePastedCookies()">Save Pasted Cookies</button>
-                </div>
+        <div class="input-section">
+            <label for="songInput">Enter Song List (numbered format):</label>
+            <div class="example">
+                Example:<br>
+                1. Shape of You<br>
+                2. See You Again<br>
+                3. Dream
             </div>
-            
-            <div class="progress-section" id="progressSection">
-                <div class="status" id="status">🔄 Processing...</div>
-                <div class="progress-bar-container">
-                    <div class="progress-bar" id="progressBar" style="width: 0%;">
-                        <span id="progressText">0%</span>
-                    </div>
-                </div>
-                <div id="currentSong" style="text-align: center; margin: 10px 0; font-weight: 600;"></div>
-                
-                <div class="logs" id="logs"></div>
-                
-                <div class="results" id="results"></div>
-                
-                <div class="screenshots" id="screenshots" style="margin-top: 20px;"></div>
-            </div>
+            <textarea 
+                id="songInput" 
+                placeholder="Paste your numbered song list here...&#10;&#10;1. Shape of You&#10;2. See You Again&#10;3. Dream"
+            ></textarea>
         </div>
-        
-        <div class="footer">
-            <p>Powered by yt-dlp & Flask | Lightning-fast HTTP scraping | Optimized for Render.com</p>
+
+        <div class="button-container">
+            <button class="search-btn" id="searchBtn" onclick="searchSongs()">
+                <span>Search YouTube</span>
+            </button>
+            <button class="clear-btn" onclick="clearAll()">
+                <span>Clear</span>
+            </button>
+        </div>
+
+        <div id="status" class="status"></div>
+
+        <div id="results" class="results">
+            <div class="results-header">
+                <h2 id="resultsTitle">Search Results</h2>
+            </div>
+            <div id="resultsContainer"></div>
         </div>
     </div>
-    
+
     <script>
-        let progressInterval = null;
-        
-        async function startProcessing() {
-            const songs = document.getElementById('songs').value.trim();
-            
-            if (!songs) {
-                alert('⚠️ Please enter at least one song!');
+        async function searchSongs() {
+            const songInput = document.getElementById('songInput').value;
+            const searchBtn = document.getElementById('searchBtn');
+            const status = document.getElementById('status');
+            const results = document.getElementById('results');
+            const resultsContainer = document.getElementById('resultsContainer');
+
+            // Validate input
+            if (!songInput.trim()) {
+                showStatus('error', 'Please enter at least one song!');
                 return;
             }
-            
-            // Disable start button, enable reset
-            document.getElementById('startBtn').disabled = true;
-            document.getElementById('resetBtn').disabled = false;
-            document.getElementById('songs').disabled = true;
 
-            // Show progress section
-            document.getElementById('progressSection').classList.add('active');
+            // Disable button and show loading
+            searchBtn.disabled = true;
+            searchBtn.innerHTML = '<span><span class="spinner"></span> Searching...</span>';
+            results.classList.remove('show');
+            showStatus('loading', 'Searching YouTube for your songs...');
 
-            // Start the timer
-            startTimer();
-            
             try {
-                const response = await fetch('/api/process', {
+                const response = await fetch('/api/search', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                     },
-                    body: JSON.stringify({ songs: songs })
+                    body: JSON.stringify({
+                        songs: songInput
+                    })
                 });
-                
+
                 const data = await response.json();
-                
+
                 if (data.success) {
-                    // Start polling for progress
-                    progressInterval = setInterval(updateProgress, 1000);
+                    showStatus('success', `Found ${data.results.filter(r => r.status === 'success').length} out of ${data.total} songs!`);
+                    displayResults(data.results);
                 } else {
-                    alert('❌ Error: ' + data.message);
-                    resetForm();
+                    showStatus('error', data.message || 'Search failed!');
                 }
             } catch (error) {
-                alert('❌ Error: ' + error.message);
-                resetForm();
+                showStatus('error', 'Network error! Please try again.');
+                console.error('Error:', error);
+            } finally {
+                searchBtn.disabled = false;
+                searchBtn.innerHTML = '<span>Search YouTube</span>';
             }
         }
-        
-        async function updateProgress() {
-            try {
-                const response = await fetch('/api/progress');
-                const data = await response.json();
-                
-                // Update status
-                const statusEmoji = {
-                    'idle': '⏸️',
-                    'processing': '🔄',
-                    'completed': '✅',
-                    'error': '❌'
-                };
-                
-                const phaseText = data.phase ? ` • ${data.phase}` : '';
-                document.getElementById('status').textContent = 
-                    statusEmoji[data.status] + ' ' + data.status.toUpperCase() + phaseText;
-                
-                // Show/hide cookie alert based on needs_cookies flag
-                const cookieAlert = document.getElementById('cookieAlert');
-                if (data.needs_cookies) {
-                    cookieAlert.classList.add('show');
-                    // Scroll to alert to make it visible
-                    cookieAlert.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+        function displayResults(results) {
+            const resultsContainer = document.getElementById('resultsContainer');
+            const resultsDiv = document.getElementById('results');
+
+            resultsContainer.innerHTML = '';
+
+            results.forEach(result => {
+                const resultItem = document.createElement('div');
+                resultItem.className = `result-item ${result.status === 'failed' ? 'failed' : ''}`;
+
+                if (result.status === 'success') {
+                    resultItem.innerHTML = `
+                        <div class="result-song">
+                            <span class="result-number">${result.number}</span>
+                            ${result.song}
+                        </div>
+                        <div class="result-url">
+                            <a href="${result.url}" target="_blank">${result.url}</a>
+                        </div>
+                    `;
                 } else {
-                    cookieAlert.classList.remove('show');
+                    resultItem.innerHTML = `
+                        <div class="result-song">
+                            <span class="result-number">${result.number}</span>
+                            ${result.song}
+                        </div>
+                        <div class="result-failed">
+                            ❌ No video found
+                        </div>
+                    `;
                 }
 
-                // Stop timer when download completes or errors
-                if (data.status === 'completed' || data.status === 'error') {
-                    stopTimer();
-                }
-                
-                // Update progress bar
-                if (data.total > 0) {
-                    const percentage = Math.round((data.progress / data.total) * 100);
-                    document.getElementById('progressBar').style.width = percentage + '%';
-                    document.getElementById('progressText').textContent = percentage + '%';
-                }
-                
-                // Update current song
-                if (data.current_song) {
-                    document.getElementById('currentSong').textContent = 
-                        '🎵 Current: ' + data.current_song;
-                }
-                
-                // Update logs
-                const logsDiv = document.getElementById('logs');
-                logsDiv.innerHTML = data.logs.join('<br>');
-                logsDiv.scrollTop = logsDiv.scrollHeight;
-                
-                // Update results
-                if (data.results.length > 0) {
-                    const resultsDiv = document.getElementById('results');
-                    resultsDiv.innerHTML = '<h4 style="margin-bottom: 10px;">📊 Results:</h4>';
-                    
-                    data.results.forEach(result => {
-                        const itemDiv = document.createElement('div');
-                        itemDiv.className = 'result-item ' + 
-                            (result.status === 'found' ? 'success' : 'failed');
-                        
-                        const emoji = result.status === 'found' ? '✅' : '❌';
-                        
-                        let urlsHtml = '';
-                        if (result.audio_url || result.thumbnail_url) {
-                            urlsHtml = '<div style="margin-top:5px;font-size:0.9em;">';
-                            if (result.audio_url) {
-                                urlsHtml += `<a href="${result.audio_url}" target="_blank" style="color:#667eea;margin-right:10px;">🎵 Audio</a>`;
-                            }
-                            if (result.thumbnail_url) {
-                                urlsHtml += `<a href="${result.thumbnail_url}" target="_blank" style="color:#667eea;">🖼️ Thumbnail</a>`;
-                            }
-                            urlsHtml += '</div>';
-                        }
-                        
-                        itemDiv.innerHTML = `
-                            <span class="emoji">${emoji}</span>
-                            <div style="flex:1;">
-                                <span>${result.song}</span>
-                                ${urlsHtml}
-                            </div>
-                        `;
-                        resultsDiv.appendChild(itemDiv);
-                    });
-                }
-                
-                // Update screenshots
-                if (data.screenshots && data.screenshots.length > 0) {
-                    const screenshotsDiv = document.getElementById('screenshots');
-                    screenshotsDiv.innerHTML = '<h4 style="margin-bottom: 10px;">📸 Debug Screenshots:</h4>';
-                    
-                    data.screenshots.forEach(screenshot => {
-                        const itemDiv = document.createElement('div');
-                        itemDiv.className = 'screenshot-item';
-                        
-                        const date = new Date(screenshot.timestamp * 1000).toLocaleTimeString();
-                        itemDiv.innerHTML = `
-                            <h4>🔍 ${screenshot.reason.replace(/_/g, ' ').toUpperCase()} - ${date}</h4>
-                            <img src="${screenshot.url}" alt="Screenshot" onclick="window.open('${screenshot.url}', '_blank')">
-                        `;
-                        screenshotsDiv.appendChild(itemDiv);
-                    });
-                }
-                
-                // Stop polling if completed or error
-                if (data.status === 'completed' || data.status === 'error') {
-                    clearInterval(progressInterval);
-                    document.getElementById('resetBtn').textContent = '✨ Start New';
-                }
-                
-            } catch (error) {
-                console.error('Error updating progress:', error);
-            }
-        }
-        
-        async function uploadCookies() {
-            const input = document.getElementById('cookiesFile');
-            if (!input.files || input.files.length === 0) {
-                alert('Please select a cookies.txt file first.');
-                return;
-            }
-            const form = new FormData();
-            form.append('file', input.files[0]);
-            try {
-                const res = await fetch('/api/upload_cookies', { method: 'POST', body: form });
-                const data = await res.json();
-                if (data.success) {
-                    document.getElementById('cookiesStatus').textContent = 'Uploaded ✔';
-                } else {
-                    alert('Cookie upload failed: ' + data.message);
-                }
-            } catch (e) {
-                alert('Cookie upload error: ' + e.message);
-            }
+                resultsContainer.appendChild(resultItem);
+            });
+
+            resultsDiv.classList.add('show');
         }
 
-        async function savePastedCookies() {
-            const text = document.getElementById('cookiesText').value.trim();
-            if (!text) {
-                alert('Please paste Netscape cookies first.');
-                return;
-            }
-            try {
-                const res = await fetch('/api/paste_cookies', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ cookies: text })
-                });
-                const data = await res.json();
-                if (data.success) {
-                    document.getElementById('cookiesStatus').textContent = 'Saved ✔';
-                } else {
-                    alert('Failed to save cookies: ' + data.message);
-                }
-            } catch (e) {
-                alert('Error saving cookies: ' + e.message);
-            }
+        function showStatus(type, message) {
+            const status = document.getElementById('status');
+            status.className = `status ${type}`;
+            status.textContent = message;
         }
 
-        async function resetForm() {
-            // Stop polling
-            if (progressInterval) {
-                clearInterval(progressInterval);
+        function clearAll() {
+            document.getElementById('songInput').value = '';
+            document.getElementById('status').className = 'status';
+            document.getElementById('results').classList.remove('show');
+        }
+
+        // Allow Enter key in textarea
+        document.getElementById('songInput').addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' && e.ctrlKey) {
+                searchSongs();
             }
-            
-            // Reset server state
-            try {
-                await fetch('/api/reset', { method: 'POST' });
-            } catch (error) {
-                console.error('Error resetting:', error);
-            }
-            
-            // Reset UI
-            document.getElementById('songs').value = '';
-            document.getElementById('songs').disabled = false;
-            document.getElementById('startBtn').disabled = false;
-            document.getElementById('resetBtn').disabled = true;
-            document.getElementById('resetBtn').textContent = '🔄 Reset';
-            document.getElementById('progressSection').classList.remove('active');
-            document.getElementById('progressBar').style.width = '0%';
-            document.getElementById('progressText').textContent = '0%';
-            document.getElementById('logs').innerHTML = '';
-            document.getElementById('results').innerHTML = '';
-            document.getElementById('screenshots').innerHTML = '';
-            document.getElementById('currentSong').textContent = '';
-            document.getElementById('cookiesStatus').textContent = '';
-            
-            // Hide cookie alert when resetting
-            document.getElementById('cookieAlert').classList.remove('show');
-
-            // Stop the timer
-            stopTimer();
-        }
-        
-        // Helper functions for cookie alert buttons
-        function scrollToCookies() {
-            const cookieSection = document.querySelector('.input-section:nth-of-type(2)');
-            if (cookieSection) {
-                cookieSection.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                // Highlight the file input briefly
-                const fileInput = cookieSection.querySelector('input[type="file"]');
-                if (fileInput) {
-                    fileInput.style.border = '2px solid #ff9500';
-                    setTimeout(() => {
-                        fileInput.style.border = '';
-                    }, 2000);
-                }
-            }
-        }
-        
-        function scrollToPasteCookies() {
-            const cookieTextarea = document.getElementById('cookiesText');
-            if (cookieTextarea) {
-                cookieTextarea.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                // Highlight the textarea briefly
-                cookieTextarea.style.border = '2px solid #ff9500';
-                cookieTextarea.focus();
-                setTimeout(() => {
-                    cookieTextarea.style.border = '';
-                }, 2000);
-            }
-        }
-
-        // Download Timer functionality
-        let timerInterval = null;
-        let startTime = null;
-
-        function startTimer() {
-            startTime = Date.now();
-            document.getElementById('timerContainer').classList.add('show');
-
-            timerInterval = setInterval(updateTimer, 1000);
-        }
-
-        function updateTimer() {
-            if (!startTime) return;
-
-            const elapsed = Date.now() - startTime;
-            const minutes = Math.floor(elapsed / 60000);
-            const seconds = Math.floor((elapsed % 60000) / 1000);
-
-            const timeString = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-            document.getElementById('timerDisplay').textContent = timeString;
-        }
-
-        function stopTimer() {
-            if (timerInterval) {
-                clearInterval(timerInterval);
-                timerInterval = null;
-            }
-            startTime = null;
-            document.getElementById('timerContainer').classList.remove('show');
-            document.getElementById('timerDisplay').textContent = '00:00';
-        }
+        });
     </script>
-
-    <!-- Download Timer (Right Side) -->
-    <div id="timerContainer" class="timer-container">
-        <div class="timer-display" id="timerDisplay">00:00</div>
-        <div class="timer-label">Download Time</div>
-    </div>
 </body>
 </html>
+
