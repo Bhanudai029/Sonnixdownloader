@@ -26,42 +26,42 @@ DOWNLOADS_FOLDER.mkdir(parents=True, exist_ok=True)
 
 def parse_song_list(song_input):
     """Parse numbered song list from text input"""
-    songs = []
-    
-    if not song_input or not song_input.strip():
-        return songs
-    
-    buffer = song_input.strip()
-    
-    # Handle single line with all songs (e.g., "1. A2. B3. C")
-    if '\n' not in buffer and re.search(r'\d+\.\s*\w', buffer):
-        parts = re.findall(r'(\d+\.)\s*([^0-9]*?)(?=\d+\.|$)', buffer)
-        if parts:
-            for _, title in parts:
-                song_name = re.sub(r"\s+", " ", title.strip())
-                if song_name:
-                    songs.append(song_name)
-    else:
-        # Handle multi-line input
-        numbered_item_regex = re.compile(r"\b(\d+)\.\s*([^\d].*?)(?=\s*\d+\.|$)", re.DOTALL)
-        matches = numbered_item_regex.findall(buffer)
+        songs = []
         
-        if matches:
-            for _, title in matches:
-                song_name = re.sub(r"\s+", " ", title.strip())
-                if song_name:
-                    songs.append(song_name)
-        else:
-            # Fallback: parse per-line
-            line_regex = re.compile(r"^\s*\d+\.\s*(.+)$")
-            for raw in buffer.splitlines():
-                m = line_regex.match(raw.strip())
-                if m:
-                    song_name = re.sub(r"\s+", " ", m.group(1).strip())
+        if not song_input or not song_input.strip():
+            return songs
+        
+        buffer = song_input.strip()
+        
+    # Handle single line with all songs (e.g., "1. A2. B3. C")
+        if '\n' not in buffer and re.search(r'\d+\.\s*\w', buffer):
+            parts = re.findall(r'(\d+\.)\s*([^0-9]*?)(?=\d+\.|$)', buffer)
+            if parts:
+                for _, title in parts:
+                    song_name = re.sub(r"\s+", " ", title.strip())
                     if song_name:
                         songs.append(song_name)
-    
-    return songs
+        else:
+        # Handle multi-line input
+            numbered_item_regex = re.compile(r"\b(\d+)\.\s*([^\d].*?)(?=\s*\d+\.|$)", re.DOTALL)
+            matches = numbered_item_regex.findall(buffer)
+            
+            if matches:
+                for _, title in matches:
+                    song_name = re.sub(r"\s+", " ", title.strip())
+                    if song_name:
+                        songs.append(song_name)
+            else:
+                # Fallback: parse per-line
+                line_regex = re.compile(r"^\s*\d+\.\s*(.+)$")
+                for raw in buffer.splitlines():
+                    m = line_regex.match(raw.strip())
+                    if m:
+                        song_name = re.sub(r"\s+", " ", m.group(1).strip())
+                        if song_name:
+                            songs.append(song_name)
+        
+        return songs
 
 def is_shorts_url(video_id, html_content):
     """Check if video ID belongs to a shorts video"""
@@ -74,29 +74,29 @@ def search_youtube_video(song_name, max_retries=2):
     """Search YouTube for a song and return long-form video URL"""
     try:
         # Format search query
-        search_query = song_name.replace(' ', '+')
-        search_url = f"https://www.youtube.com/results?search_query={search_query}"
-        
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
-            'Accept-Language': 'en-US,en;q=0.9',
+            search_query = song_name.replace(' ', '+')
+            search_url = f"https://www.youtube.com/results?search_query={search_query}"
+            
+                headers = {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+                    'Accept-Language': 'en-US,en;q=0.9',
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-        }
-        
+                }
+                
         # Make HTTP request to YouTube search
-        response = requests.get(search_url, headers=headers, timeout=15)
-        
-        if response.status_code != 200:
-            return None
-        
+                response = requests.get(search_url, headers=headers, timeout=15)
+                
+                if response.status_code != 200:
+                    return None
+                
         # Extract video IDs from HTML
         # Pattern: "videoId":"VIDEO_ID"
-        video_id_pattern = r'"videoId":"([a-zA-Z0-9_-]{11})"'
-        matches = re.findall(video_id_pattern, response.text)
-        
-        if not matches:
-            return None
-        
+                video_id_pattern = r'"videoId":"([a-zA-Z0-9_-]{11})"'
+                matches = re.findall(video_id_pattern, response.text)
+                
+                if not matches:
+                    return None
+                
         # Filter out shorts and get first valid long-form video
         for video_id in matches[:15]:  # Check first 15 results
             # Check if this is a shorts video
@@ -105,17 +105,17 @@ def search_youtube_video(song_name, max_retries=2):
             
             # Valid long-form video found
             if len(video_id) == 11:
-                video_url = f"https://www.youtube.com/watch?v={video_id}"
-                return video_url
-        
-        return None
-        
-    except requests.Timeout:
-        return None
-    except Exception as e:
+                        video_url = f"https://www.youtube.com/watch?v={video_id}"
+                        return video_url
+                
+                return None
+                    
+            except requests.Timeout:
+                return None
+            except Exception as e:
         print(f"Error searching for {song_name}: {str(e)[:100]}")
-        return None
-
+                return None
+                
 @app.route('/')
 def index():
     """Serve the main page"""
@@ -123,14 +123,14 @@ def index():
 
 def setup_selenium_driver():
     """Setup headless Chrome driver for Selenium"""
-    chrome_options = Options()
+                chrome_options = Options()
     chrome_options.add_argument("--headless=new")
-    chrome_options.add_argument("--no-sandbox")
-    chrome_options.add_argument("--disable-dev-shm-usage")
-    chrome_options.add_argument("--disable-gpu")
-    chrome_options.add_argument("--window-size=1920,1080")
-    chrome_options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
-    
+                chrome_options.add_argument("--no-sandbox")
+                chrome_options.add_argument("--disable-dev-shm-usage")
+                chrome_options.add_argument("--disable-gpu")
+                chrome_options.add_argument("--window-size=1920,1080")
+                chrome_options.add_argument("--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36")
+
     # Set download directory preferences (use add_experimental_option, not add_experimental_prefs)
     prefs = {
         "download.default_directory": str(DOWNLOADS_FOLDER.absolute()),
@@ -151,8 +151,8 @@ def setup_selenium_driver():
             service = Service(executable_path=chromedriver_path)
             driver = webdriver.Chrome(service=service, options=chrome_options)
         else:
-            driver = webdriver.Chrome(options=chrome_options)
-        
+                driver = webdriver.Chrome(options=chrome_options)
+
         return driver
     except Exception as e:
         print(f"Error setting up Selenium driver: {e}")
@@ -178,14 +178,14 @@ def download_audio():
         try:
             # Navigate to ezconv.com
             print("Navigating to ezconv.com...")
-            driver.get("https://ezconv.com/v820")
+                    driver.get("https://ezconv.com/v820")
             time.sleep(2)
             
             # Find and fill the URL input field
             print("Looking for URL input field...")
             url_input = WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, "input[type='text']"))
-            )
+                        EC.presence_of_element_located((By.CSS_SELECTOR, "input[type='text']"))
+                    )
             url_input.clear()
             url_input.send_keys(youtube_url)
             print("YouTube URL pasted")
@@ -198,22 +198,37 @@ def download_audio():
             convert_button.click()
             print("Convert button clicked")
             
-            # Wait for conversion to complete - look for Download MP3 button
+            # Wait for conversion to complete - check every second for Download MP3 button
             print("Waiting for conversion to complete...")
+            download_button = None
+            max_wait_time = 60  # Maximum 60 seconds
+            
             try:
-                # Wait up to 60 seconds for the Download MP3 button to appear
-                download_button = WebDriverWait(driver, 60).until(
-                    EC.presence_of_element_located((By.XPATH, "//button[normalize-space()='Download MP3']"))
-                )
-                print(f"Download MP3 button appeared!")
+                # Check every second if the download button appears
+                for seconds_elapsed in range(max_wait_time):
+                    try:
+                        # Check if button exists
+                        download_button = driver.find_element(By.XPATH, "//button[normalize-space()='Download MP3']")
+                        print(f"✅ Download MP3 button appeared after {seconds_elapsed + 1} seconds!")
+                        break
+                    except:
+                        # Button not found yet, wait 1 second and check again
+                        time.sleep(1)
+                        if (seconds_elapsed + 1) % 5 == 0:  # Log every 5 seconds
+                            print(f"   ⏳ Still converting... ({seconds_elapsed + 1}s elapsed)")
+                
+                if not download_button:
+                    print(f"❌ Timeout: Download button did not appear after {max_wait_time} seconds")
+                    driver.quit()
+                    return jsonify({'success': False, 'message': f'Conversion timeout after {max_wait_time} seconds'})
                 
                 # Wait a bit more to ensure it's clickable
-                time.sleep(2)
+                        time.sleep(1)
                 
                 # Try to make it clickable
                 download_button = WebDriverWait(driver, 10).until(
-                    EC.element_to_be_clickable((By.XPATH, "//button[normalize-space()='Download MP3']"))
-                )
+                            EC.element_to_be_clickable((By.XPATH, "//button[normalize-space()='Download MP3']"))
+                        )
                 
                 print(f"Download button is clickable, getting download link...")
                 
@@ -247,10 +262,10 @@ def download_audio():
                 time.sleep(2)
                 
                 # Try to get download URL from current page
-                current_url = driver.current_url
+                    current_url = driver.current_url
                 print(f"Current URL after click: {current_url}")
-                
-                if 'download' in current_url.lower() or '.mp3' in current_url.lower():
+
+                    if 'download' in current_url.lower() or '.mp3' in current_url.lower():
                     download_link = current_url
                     print(f"Download link from redirect: {download_link}")
                 
@@ -258,7 +273,7 @@ def download_audio():
                     # Look for download links on the page
                     print("Looking for download links on page...")
                     download_links = driver.find_elements(By.CSS_SELECTOR, "a[href*='download'], a[href*='.mp3'], a[download]")
-                    if download_links:
+                            if download_links:
                         download_link = download_links[0].get_attribute("href")
                         print(f"Found download link: {download_link}")
                 
@@ -284,7 +299,7 @@ def download_audio():
                     print(f"Starting download via requests...")
                     response = requests.get(download_link, stream=True, timeout=60, allow_redirects=True)
                     response.raise_for_status()
-                    
+
                     # Generate unique filename
                     filename = f"audio_{uuid.uuid4().hex[:8]}.mp3"
                     filepath = DOWNLOADS_FOLDER / filename
@@ -293,11 +308,11 @@ def download_audio():
                     with open(filepath, 'wb') as f:
                         for chunk in response.iter_content(chunk_size=8192):
                             f.write(chunk)
-                    
+
                     print(f"Audio downloaded successfully: {filename}")
                     
                     driver.quit()
-                    
+
                     # Return the audio file URL
                     return jsonify({
                         'success': True,
@@ -308,7 +323,7 @@ def download_audio():
                     print("ERROR: Could not find any download link")
                     driver.quit()
                     return jsonify({'success': False, 'message': 'Could not find download link after conversion'})
-                    
+
             except Exception as e:
                 print(f"Error finding download button: {str(e)}")
                 driver.quit()
@@ -319,8 +334,8 @@ def download_audio():
             if driver:
                 driver.quit()
             return jsonify({'success': False, 'message': f'Automation error: {str(e)[:100]}'})
-    
-    except Exception as e:
+
+        except Exception as e:
         print(f"Error in download_audio: {str(e)}")
         return jsonify({'success': False, 'message': f'Server error: {str(e)[:100]}'})
 
@@ -361,8 +376,8 @@ def search_songs():
             
             results.append({
                 'number': i,
-                'song': song,
-                'url': video_url,
+                        'song': song,
+                        'url': video_url,
                 'status': 'success' if video_url else 'failed'
             })
             
