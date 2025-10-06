@@ -52,7 +52,7 @@ def cleanup_memory():
     for driver in list(_active_drivers):
         try:
             driver.quit()
-        except Exception:
+                    except Exception:
             pass
     _active_drivers.clear()
     
@@ -77,7 +77,7 @@ def parse_song_list(song_input: str) -> list[str]:
                     if song_name:
                         songs.append(song_name)
         else:
-        # Handle multi-line input
+            # Handle multi-line input
             numbered_item_regex = re.compile(r"\b(\d+)\.\s*([^\d].*?)(?=\s*\d+\.|$)", re.DOTALL)
             matches = numbered_item_regex.findall(buffer)
             if matches:
@@ -94,8 +94,8 @@ def parse_song_list(song_input: str) -> list[str]:
                         song_name = re.sub(r"\s+", " ", m.group(1).strip())
                         if song_name:
                             songs.append(song_name)
-        
-        return songs
+    
+    return songs
 
 def is_shorts_url(video_id: str, html_content: str) -> bool:
     """Check if video ID belongs to a shorts video by looking for '/shorts/VIDEOID' in HTML."""
